@@ -1,0 +1,17 @@
+name: Site Health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+jobs:
+  check-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check Pages site
+        run: python scripts/check_site.py --base-url https://onemule.github.io/scibudy/

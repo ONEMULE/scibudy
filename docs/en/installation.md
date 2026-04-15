@@ -8,6 +8,8 @@ Use the npm bootstrap wrapper:
 npx scibudy-install --profile base
 ```
 
+If you are new, read [Prerequisites](prerequisites.md) first.
+
 ## Profiles
 
 - `base`: MCP server, CLI, UI, Codex config
@@ -24,6 +26,23 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .[dev]
 scibudy bootstrap --profile base --install-codex
+```
+
+## Codex MCP integration
+
+Scibudy can add the MCP configuration for you during bootstrap.
+
+Recommended:
+
+```bash
+scibudy bootstrap --profile base --install-codex
+```
+
+Manual follow-up:
+
+```bash
+scibudy install-codex
+codex mcp get research
 ```
 
 ## Platform support

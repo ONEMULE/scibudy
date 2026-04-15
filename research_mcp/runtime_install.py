@@ -195,14 +195,25 @@ def upgrade_runtime(requirement: str) -> None:
 
 def bootstrap_summary(state: InstallState) -> str:
     lines = [
-        f"app_home: {state.app_home}",
-        f"profile: {state.install_profile}",
-        f"runtime_python: {state.runtime_python}",
-        f"runtime_command: {state.runtime_command}",
-        f"codex_configured: {state.codex_configured}",
-        f"ui_assets_ready: {state.ui_assets_ready}",
-        f"local_models.installed: {state.local_models.installed}",
-        f"local_models.warmed_embedding: {state.local_models.warmed_embedding}",
-        f"local_models.warmed_reranker: {state.local_models.warmed_reranker}",
+        "Scibudy bootstrap completed.",
+        "",
+        f"App home: {state.app_home}",
+        f"Install profile: {state.install_profile}",
+        f"Runtime Python: {state.runtime_python}",
+        f"Scibudy command: {state.runtime_command}",
+        f"Codex MCP configured: {'yes' if state.codex_configured else 'no'}",
+        f"UI assets ready: {'yes' if state.ui_assets_ready else 'no'}",
+        f"Local models installed: {'yes' if state.local_models.installed else 'no'}",
+        f"Local embedding warmed: {'yes' if state.local_models.warmed_embedding else 'no'}",
+        f"Local reranker warmed: {'yes' if state.local_models.warmed_reranker else 'no'}",
+        "",
+        "Suggested next steps:",
+        "1. Run `scibudy doctor` to verify providers and configuration.",
+        "2. Run `scibudy search \"your topic\"` to verify basic search.",
+        "3. Run `scibudy ui --open` if you want the browser manager.",
     ]
+    if not state.codex_configured:
+        lines.append("4. Run `scibudy install-codex` to add the MCP server to Codex manually.")
+    if state.install_profile in {"gpu-local", "full"} and not state.local_models.warmed_embedding:
+        lines.append("4. Run `scibudy warm-local-models --background` to prefetch local GPU models.")
     return "\n".join(lines)

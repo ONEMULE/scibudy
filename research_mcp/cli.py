@@ -442,9 +442,19 @@ def run_doctor(args: argparse.Namespace) -> None:
         return
     print(f"Research MCP {health.version}")
     print(f"Project root: {health.project_root}")
+    if health.app_home:
+        print(f"App home: {health.app_home}")
+    if health.install_profile:
+        print(f"Install profile: {health.install_profile}")
+    if health.runtime_python:
+        print(f"Runtime Python: {health.runtime_python}")
     print(f".env file: {health.env_file} ({'present' if health.env_file_exists else 'missing'})")
     print(f"Codex config: {health.codex_config_path} ({'configured' if health.codex_configured else 'missing research block'})")
     print(f"Cache DB: {health.cache_db_path}")
+    if health.local_model_env_ready is not None:
+        print(f"Local model env ready: {'yes' if health.local_model_env_ready else 'no'}")
+    if health.local_model_profile:
+        print(f"Local model profile: {health.local_model_profile}")
     print(f"Status: {health.status}")
     print("Providers:")
     for item in health.provider_statuses:
@@ -457,6 +467,10 @@ def run_doctor(args: argparse.Namespace) -> None:
         for item in payload["smoke"]:
             detail = f"count={item['result_count']}" if item["status"] == "ok" else item.get("message", "")
             print(f"- {item['provider']}: {item['status']} ({detail})")
+    if health.suggestions:
+        print("Recommended next steps:")
+        for suggestion in health.suggestions:
+            print(f"- {suggestion}")
 
 
 def run_bootstrap(args: argparse.Namespace) -> None:
