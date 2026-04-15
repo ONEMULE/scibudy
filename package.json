@@ -20,8 +20,8 @@
     "scientific-workflow"
   ],
   "bin": {
-    "scibudy-install": "./bin/scibudy-install.mjs",
-    "scibudy-bootstrap": "./bin/scibudy-install.mjs"
+    "scibudy-install": "bin/scibudy-install.mjs",
+    "scibudy-bootstrap": "bin/scibudy-install.mjs"
   },
   "files": [
     "bin/",
