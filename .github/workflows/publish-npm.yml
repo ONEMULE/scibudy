@@ -21,11 +21,13 @@ jobs:
         run: npm ci --prefix web
       - name: Build frontend
         run: npm run build --prefix web
-      - name: Publish installer
-        if: secrets.NPM_TOKEN != ''
-        run: npm publish --provenance --access public
+      - name: Publish installer when NPM_TOKEN is configured
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "Skipping npm publish because NPM_TOKEN is not configured."
+            exit 0
+          fi
+          npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Skip publish when NPM_TOKEN is not configured
-        if: secrets.NPM_TOKEN == ''
-        run: echo "Skipping npm publish because NPM_TOKEN is not configured."
+        shell: bash
