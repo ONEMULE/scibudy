@@ -11,9 +11,12 @@ Scibudy is a Codex-native research expansion assistant for literature search, li
 
 ## Documentation map
 
+- [Prerequisites](prerequisites.md)
 - [Installation](installation.md)
 - [Quickstart](quickstart.md)
+- [Codex MCP setup](codex-setup.md)
 - [CLI and MCP](cli-and-mcp.md)
+- [Examples](examples.md)
 - [Configuration](configuration.md)
 - [GPU local models](gpu-local.md)
 - [Library workflow](library-workflow.md)

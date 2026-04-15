@@ -8,6 +8,8 @@
 npx scibudy-install --profile base
 ```
 
+如果你是第一次接触这个工具，建议先看 [前置条件](prerequisites.md)。
+
 ## 安装 profile
 
 - `base`：MCP、CLI、UI、Codex 配置
@@ -24,6 +26,21 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .[dev]
 scibudy bootstrap --profile base --install-codex
+```
+
+## Codex MCP 接入
+
+推荐直接在 bootstrap 时完成：
+
+```bash
+scibudy bootstrap --profile base --install-codex
+```
+
+或者后续手动执行：
+
+```bash
+scibudy install-codex
+codex mcp get research
 ```
 
 ## 平台支持

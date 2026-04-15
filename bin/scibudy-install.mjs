@@ -20,6 +20,7 @@ function parseArgs(argv) {
     upgrade: false,
     installCodex: true,
     noPrompt: false,
+    help: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -30,6 +31,7 @@ function parseArgs(argv) {
     else if (arg === "--upgrade") args.upgrade = true;
     else if (arg === "--no-prompt") args.noPrompt = true;
     else if (arg === "--no-install-codex") args.installCodex = false;
+    else if (arg === "--help" || arg === "-h") args.help = true;
   }
   return args;
 }
@@ -37,10 +39,94 @@ function parseArgs(argv) {
 function findPython(explicitPython) {
   const candidates = explicitPython ? [explicitPython] : ["python3", "python"];
   for (const candidate of candidates) {
-    const result = spawnSync(candidate, ["--version"], { stdio: "ignore" });
-    if (result.status === 0) return candidate;
+    const result = spawnSync(candidate, ["--version"], { encoding: "utf8" });
+    if (result.status === 0) {
+      const versionText = (result.stdout || result.stderr || "").trim();
+      const match = versionText.match(/Python\s+(\d+)\.(\d+)\.(\d+)/i);
+      if (!match) continue;
+      const major = Number(match[1]);
+      const minor = Number(match[2]);
+      if (major > 3 || (major === 3 && minor >= 10)) {
+        return { command: candidate, version: versionText };
+      }
+    }
   }
   throw new Error("Python 3.10+ is required but no python executable was found");
+}
+
+function printHelp() {
+  console.log(`Scibudy installer
+
+Usage:
+  npx scibudy-install --profile base
+
+Common options:
+  --profile base|analysis|gpu-local|full
+  --app-home /custom/path
+  --python /path/to/python3
+  --from-path /path/to/local/source/checkout
+  --upgrade
+  --no-prompt
+  --no-install-codex
+
+Profiles:
+  base       install CLI, MCP runtime, UI assets, and optional Codex config
+  analysis   same as base, oriented toward full-text analysis workflows
+  gpu-local  install the dedicated local model environment for Linux + NVIDIA
+  full       base + gpu-local
+
+Prerequisites:
+  - Node.js 18+ to run this installer
+  - Python 3.10+ for the runtime
+  - Codex optional, but recommended if you want MCP integration
+  - conda + NVIDIA GPU only if you want the full local model profile
+`);
+}
+
+function ensureNodeVersion() {
+  const major = Number(process.versions.node.split(".")[0] || 0);
+  if (major < 18) {
+    throw new Error(`Node.js 18+ is required. Detected ${process.versions.node}.`);
+  }
+}
+
+function isLinux() {
+  return process.platform === "linux";
+}
+
+function hasNvidia() {
+  const result = spawnSync("nvidia-smi", ["--query-gpu=name", "--format=csv,noheader"], {
+    stdio: "ignore",
+  });
+  return result.status === 0;
+}
+
+function hasCodex() {
+  const result = spawnSync("codex", ["--version"], { stdio: "ignore" });
+  return result.status === 0;
+}
+
+function normalizeProfile(args) {
+  if (args.profile === "gpu-local" && (!isLinux() || !hasNvidia())) {
+    throw new Error("The gpu-local profile currently requires Linux with an NVIDIA GPU. Use --profile base or --profile analysis on this machine.");
+  }
+  if (args.profile === "full" && (!isLinux() || !hasNvidia())) {
+    console.log("Full profile requested on a machine without the supported Linux+NVIDIA local-model path. Continuing with the non-GPU parts of the install.");
+  }
+}
+
+function printPreflight(args, pythonInfo) {
+  console.log("Scibudy installer preflight");
+  console.log(`- profile: ${args.profile}`);
+  console.log(`- app home: ${args.appHome}`);
+  console.log(`- python: ${pythonInfo.command} (${pythonInfo.version})`);
+  console.log(`- platform: ${process.platform}`);
+  console.log(`- nvidia gpu detected: ${hasNvidia() ? "yes" : "no"}`);
+  console.log(`- codex detected: ${hasCodex() ? "yes" : "no"}`);
+  console.log(`- install Codex config: ${args.installCodex ? "yes" : "no"}`);
+  console.log(`- prompt for secrets: ${args.noPrompt ? "no" : "yes"}`);
+  console.log(`- install source: ${args.fromPath ? path.resolve(args.fromPath) : `${manifest.python.package_name}@${manifest.python.version}`}`);
+  console.log("");
 }
 
 function run(command, args, options = {}) {
@@ -67,8 +153,15 @@ function syncUiAssets(appHome) {
 }
 
 function main() {
+  ensureNodeVersion();
   const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    printHelp();
+    return;
+  }
+  normalizeProfile(args);
   const python = findPython(args.python);
+  printPreflight(args, python);
   const runtimeVenv = path.join(args.appHome, "runtime", ".venv");
   const runtimePython = process.platform === "win32"
     ? path.join(runtimeVenv, "Scripts", "python.exe")
@@ -76,9 +169,11 @@ function main() {
 
   fs.mkdirSync(path.dirname(runtimeVenv), { recursive: true });
   if (!fs.existsSync(runtimePython)) {
-    run(python, ["-m", "venv", runtimeVenv], { env: { RESEARCH_MCP_HOME: args.appHome } });
+    console.log("Creating runtime virtual environment...");
+    run(python.command, ["-m", "venv", runtimeVenv], { env: { RESEARCH_MCP_HOME: args.appHome } });
   }
 
+  console.log("Upgrading pip in the runtime environment...");
   run(runtimePython, ["-m", "pip", "install", "--upgrade", "pip"]);
   const requirement = args.fromPath
     ? path.resolve(args.fromPath)
@@ -86,7 +181,9 @@ function main() {
   const pipArgs = ["-m", "pip", "install"];
   if (args.upgrade) pipArgs.push("--upgrade");
   pipArgs.push(requirement);
+  console.log(`Installing runtime package: ${requirement}`);
   run(runtimePython, pipArgs);
+  console.log("Syncing UI assets...");
   syncUiAssets(args.appHome);
 
   const cliModuleArgs = [
@@ -102,12 +199,20 @@ function main() {
   else cliModuleArgs.push("--no-install-codex");
   if (args.noPrompt) cliModuleArgs.push("--no-prompt");
 
+  console.log("Running Scibudy bootstrap...");
   run(runtimePython, cliModuleArgs, {
     env: {
       RESEARCH_MCP_HOME: args.appHome,
       SCIBUDY_HOME: args.appHome,
     },
   });
+  console.log("");
+  console.log("Scibudy installer finished.");
+  console.log("Next steps:");
+  console.log("- Run `scibudy doctor`");
+  console.log("- Run `scibudy search \"your topic\"`");
+  console.log("- Run `scibudy ui --open`");
+  console.log("- Run `codex mcp get research` if you enabled Codex integration");
 }
 
 main();

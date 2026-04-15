@@ -4,11 +4,15 @@ repo_url: https://github.com/ONEMULE/scibudy
 theme:
   name: material
 nav:
+  - Home: index.md
   - English:
       - Overview: en/index.md
+      - Prerequisites: en/prerequisites.md
       - Installation: en/installation.md
       - Quickstart: en/quickstart.md
+      - Codex MCP Setup: en/codex-setup.md
       - CLI and MCP: en/cli-and-mcp.md
+      - Examples: en/examples.md
       - Configuration: en/configuration.md
       - GPU Local: en/gpu-local.md
       - Library Workflow: en/library-workflow.md
@@ -19,9 +23,12 @@ nav:
       - Releasing: en/releasing.md
   - 中文:
       - 概览: zh/index.md
+      - 前置条件: zh/prerequisites.md
       - 安装: zh/installation.md
       - 快速开始: zh/quickstart.md
+      - Codex MCP 接入: zh/codex-setup.md
       - CLI 与 MCP: zh/cli-and-mcp.md
+      - 使用示例: zh/examples.md
       - 配置说明: zh/configuration.md
       - 本地 GPU 模型: zh/gpu-local.md
       - 文献库工作流: zh/library-workflow.md
