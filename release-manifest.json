@@ -1,9 +1,9 @@
 {
-  "installer_version": "0.1.0",
+  "installer_version": "0.1.1",
   "python": {
     "package_name": "scibudy",
-    "version": "0.1.0",
-    "requirement": "scibudy==0.1.0"
+    "version": "0.1.1",
+    "requirement": "scibudy==0.1.1"
   },
   "frontend": {
     "source_dir": "web",
