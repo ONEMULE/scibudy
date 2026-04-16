@@ -178,8 +178,8 @@ class LibraryManager:
             f"Source: `{source_kind}`",
             f"Reference: `{source_ref}`",
             "",
-            "| Rank | Title | Manual download URL | Landing URL | DOI |",
-            "| --- | --- | --- | --- | --- |",
+            "| Rank | Title | Manual download URL | Landing URL | DOI | Status | Message |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
         ]
         bib_entries = []
 
@@ -215,6 +215,7 @@ class LibraryManager:
                 "doi": result.doi or "",
                 "candidate_urls": " | ".join(candidates),
                 "download_status": record.status if record else "",
+                "download_message": record.message if record and record.message else "",
             }
             checklist_rows.append(checklist_row)
             download_text = "yes" if row["local_pdf_path"] else (record.status if record else "")
@@ -222,7 +223,7 @@ class LibraryManager:
                 f"| {rank} | {row['year']} | {row['source']} | {download_text} | {row['title']} | {row['doi']} |"
             )
             checklist_lines.append(
-                f"| {rank} | {row['title']} | {manual_url} | {row['landing_url']} | {row['doi']} |"
+                f"| {rank} | {row['title']} | {manual_url} | {row['landing_url']} | {row['doi']} | {checklist_row['download_status']} | {checklist_row['download_message']} |"
             )
             bib_entries.append(self._bibtex_entry(result, rank))
 

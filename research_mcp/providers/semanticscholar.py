@@ -30,7 +30,7 @@ class SemanticScholarProvider(BaseProvider):
             params={
                 "query": query,
                 "limit": limit,
-                "fields": "paperId,title,year,authors,citationCount,url,abstract,externalIds,openAccessPdf,journal,publicationDate",
+                "fields": "paperId,title,year,authors,citationCount,influentialCitationCount,referenceCount,url,abstract,externalIds,openAccessPdf,journal,publicationDate,publicationTypes,venue,fieldsOfStudy",
             },
             headers={"x-api-key": self.settings.semantic_scholar_api_key} if has_api_key else None,
             ttl_sec=self.cache_ttl_sec,
@@ -57,7 +57,14 @@ class SemanticScholarProvider(BaseProvider):
                     citation_count=safe_int(item.get("citationCount")),
                     is_open_access=bool(open_access_pdf) if open_access_pdf else None,
                     open_access_url=pick_url(open_access_pdf),
-                    extras={"mode": "authenticated" if has_api_key else "public-bulk"},
+                    extras={
+                        "mode": "authenticated" if has_api_key else "public-bulk",
+                        "influential_citation_count": safe_int(item.get("influentialCitationCount")),
+                        "reference_count": safe_int(item.get("referenceCount")),
+                        "publication_types": item.get("publicationTypes") or [],
+                        "venue": normalize_whitespace(item.get("venue")),
+                        "fields_of_study": item.get("fieldsOfStudy") or [],
+                    },
                 )
             )
         return results

@@ -36,6 +36,18 @@ class Settings(BaseSettings):
         default=25,
         validation_alias=AliasChoices("RESEARCH_MCP_MAX_RESULTS_PER_PROVIDER"),
     )
+    provider_timeout_sec: float = Field(
+        default=45.0,
+        validation_alias=AliasChoices("RESEARCH_MCP_PROVIDER_TIMEOUT_SEC"),
+    )
+    search_total_timeout_sec: float = Field(
+        default=110.0,
+        validation_alias=AliasChoices("RESEARCH_MCP_SEARCH_TOTAL_TIMEOUT_SEC"),
+    )
+    max_provider_workers: int = Field(
+        default=6,
+        validation_alias=AliasChoices("RESEARCH_MCP_MAX_PROVIDER_WORKERS"),
+    )
     cache_db_path: Path = Field(
         default_factory=_default_cache_path,
         validation_alias=AliasChoices("RESEARCH_MCP_CACHE_DB_PATH"),

@@ -11,6 +11,7 @@ from typing import Any
 
 from dotenv import dotenv_values
 
+from research_mcp import __version__
 from research_mcp.codex_config import install_to_codex_config
 from research_mcp.formatters import (
     format_analysis_settings_response,
@@ -28,7 +29,7 @@ from research_mcp.formatters import (
     format_search_response,
 )
 from research_mcp.install_state import load_install_state
-from research_mcp.paths import ENV_FILE
+from research_mcp.paths import CODEX_CONFIG_FILE, ENV_FILE
 from research_mcp.release_manifest import load_release_manifest
 from research_mcp.runtime_install import (
     bootstrap_runtime,
@@ -56,6 +57,10 @@ KEY_SPECS = [
     ("CORE_API_KEY", "CORE API key", False),
     ("OPENAI_API_KEY", "OpenAI API key", False),
 ]
+KEY_GROUP_LABELS = {
+    True: "Strongly recommended keys",
+    False: "Optional performance and coverage keys",
+}
 
 
 def mcp_main() -> None:
@@ -76,7 +81,9 @@ def cli_main() -> None:
 
 
 def dispatch(args: argparse.Namespace) -> None:
-    if args.command == "serve":
+    if args.command == "version":
+        print(f"Scibudy {__version__}")
+    elif args.command == "serve":
         run_serve(args)
     elif args.command == "ui":
         run_ui(args)
@@ -155,8 +162,11 @@ def dispatch(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="research-mcp")
+    parser = argparse.ArgumentParser(prog="scibudy")
+    parser.add_argument("--version", action="version", version=f"Scibudy {__version__}")
     subparsers = parser.add_subparsers(dest="command")
+
+    subparsers.add_parser("version", help="Print the Scibudy version.")
 
     serve_parser = subparsers.add_parser("serve", help="Run the MCP server.")
     serve_parser.add_argument("--transport", choices=["stdio", "sse", "streamable-http"], default="stdio")
@@ -403,16 +413,19 @@ def apply_setup(
     if not no_prompt:
         print(f"Configuring research MCP secrets in {ENV_FILE}")
         print("Press Enter to keep the current value. Type '-' to clear a saved value.")
-        for key, label, recommended in KEY_SPECS:
-            if key in updates:
-                continue
-            existing = (current.get(key) or "").strip()
-            prompt = f"{label}"
-            prompt += " (recommended)" if recommended else " (optional)"
-            prompt += ": "
-            value = prompt_for_value(key=key, prompt=prompt, existing=existing)
-            if value is not None:
-                updates[key] = value
+        for recommended in [True, False]:
+            print("")
+            print(KEY_GROUP_LABELS[recommended])
+            for key, label, is_recommended in KEY_SPECS:
+                if is_recommended != recommended or key in updates:
+                    continue
+                existing = (current.get(key) or "").strip()
+                prompt = f"{label}"
+                prompt += " (recommended)" if recommended else " (optional)"
+                prompt += ": "
+                value = prompt_for_value(key=key, prompt=prompt, existing=existing)
+                if value is not None:
+                    updates[key] = value
     merged = {key: value for key, value in current.items() if value}
     for key, value in updates.items():
         if value:
@@ -465,7 +478,7 @@ def run_doctor(args: argparse.Namespace) -> None:
     if payload.get("smoke"):
         print("Smoke tests:")
         for item in payload["smoke"]:
-            detail = f"count={item['result_count']}" if item["status"] == "ok" else item.get("message", "")
+            detail = f"count={item['result_count']}" if item["status"] == "ok" and "result_count" in item else item.get("message", "")
             print(f"- {item['provider']}: {item['status']} ({detail})")
     if health.suggestions:
         print("Recommended next steps:")
@@ -830,7 +843,7 @@ def validate_key_name(key: str) -> None:
 
 def prompt_for_value(*, key: str, prompt: str, existing: str) -> str | None:
     if existing:
-        prompt = f"{prompt}[saved]"
+        prompt = f"{prompt}[saved: {mask_value(existing)}]"
     reader = getpass.getpass if key in SECRET_KEYS else input
     raw = reader(prompt)
     if raw == "":
@@ -838,6 +851,12 @@ def prompt_for_value(*, key: str, prompt: str, existing: str) -> str | None:
     if raw.strip() == "-":
         return ""
     return raw.strip()
+
+
+def mask_value(value: str) -> str:
+    if len(value) <= 8:
+        return "****"
+    return f"{value[:3]}...{value[-4:]}"
 
 
 def write_env_file(values: dict[str, str]) -> None:
@@ -856,7 +875,13 @@ def write_env_file(values: dict[str, str]) -> None:
 
 
 def run_smoke_tests(service: ResearchService) -> list[dict[str, Any]]:
-    checks: list[dict[str, Any]] = []
+    checks: list[dict[str, Any]] = [
+        {
+            "provider": "Codex MCP config",
+            "status": "ok" if CODEX_CONFIG_FILE.exists() and "[mcp_servers.research]" in CODEX_CONFIG_FILE.read_text(encoding="utf-8", errors="ignore") else "error",
+            "message": str(CODEX_CONFIG_FILE),
+        }
+    ]
     queries = {
         "openalex": "test-time scaling multimodal reasoning",
         "arxiv": "diffusion model planning",

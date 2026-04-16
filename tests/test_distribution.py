@@ -1,5 +1,9 @@
 from pathlib import Path
 
+import pytest
+
+from research_mcp import __version__
+from research_mcp.cli import cli_main
 from research_mcp.install_state import InstallState, load_install_state, save_install_state, update_install_state
 from research_mcp.release_manifest import load_release_manifest
 
@@ -34,3 +38,19 @@ def test_install_state_round_trip(tmp_path, monkeypatch):
     updated = update_install_state(install_profile="base")
     assert updated.install_profile == "base"
     assert state_file.exists()
+
+
+def test_cli_version_flag(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["scibudy", "--version"])
+    with pytest.raises(SystemExit) as excinfo:
+        cli_main()
+
+    assert excinfo.value.code == 0
+    assert __version__ in capsys.readouterr().out
+
+
+def test_cli_version_command(monkeypatch, capsys):
+    monkeypatch.setattr("sys.argv", ["scibudy", "version"])
+    cli_main()
+
+    assert __version__ in capsys.readouterr().out

@@ -47,6 +47,36 @@ def test_download_and_organize_library(tmp_path):
     assert Path(organized.markdown_path).exists()
     assert Path(organized.bibtex_path).exists()
     assert Path(organized.manifest_path).exists()
+    checklist_text = Path(organized.download_checklist_markdown_path).read_text(encoding="utf-8")
+    assert "Status" in checklist_text
+    assert "Message" in checklist_text
+
+
+def test_failed_pdf_download_records_manual_checklist_reason(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="<html>not a pdf</html>", headers={"content-type": "text/html"})
+
+    manager = LibraryManager(
+        Settings(RESEARCH_MCP_CACHE_DB_PATH=str(tmp_path / "state.db")),
+        oa_resolver=StubResolver(),
+        transport=httpx.MockTransport(handler),
+    )
+    result = LiteratureResult(
+        title="Manual Paper",
+        source="CORE",
+        source_id="C1",
+        landing_url="https://example.com/manual",
+        pdf_url="https://example.com/manual",
+        extras={"rank": 1},
+    )
+
+    organized = manager.organize_library(results=[result], target_dir=tmp_path / "library-failed", limit=1, source_kind="query", source_ref="manual", download_pdfs=True)
+
+    assert organized.status == "error"
+    assert organized.records[0].status == "skipped"
+    checklist = Path(organized.download_checklist_csv_path).read_text(encoding="utf-8")
+    assert "download_message" in checklist
+    assert "no usable PDF URL found" in checklist
 
 
 def test_response_to_results_adds_rank():

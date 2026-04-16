@@ -32,6 +32,7 @@ class ProviderCoverage(BaseModel):
     status: Literal["ok", "skipped", "error"]
     result_count: int = 0
     message: str | None = None
+    elapsed_ms: int | None = None
 
 
 class SearchResponse(BaseModel):

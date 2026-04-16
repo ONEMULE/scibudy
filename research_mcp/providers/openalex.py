@@ -50,6 +50,9 @@ class OpenAlexProvider(BaseProvider):
                     license=first_non_empty(best_oa_location.get("license"), open_access.get("oa_status")),
                     extras={
                         "type": item.get("type"),
+                        "venue": source.get("display_name"),
+                        "host_organization": source.get("host_organization_name"),
+                        "oa_status": open_access.get("oa_status"),
                         "topics": [topic.get("display_name") for topic in item.get("topics", []) if topic.get("display_name")],
                     },
                 )

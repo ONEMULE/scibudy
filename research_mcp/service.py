@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import concurrent.futures
 from functools import lru_cache
 from pathlib import Path
+import time
 
 from research_mcp import __version__
 from research_mcp.analysis_config import settings_response
@@ -33,6 +35,7 @@ from research_mcp.models import (
 )
 from research_mcp.paths import APP_HOME, CODEX_CONFIG_FILE, ENV_FILE, INSTALL_STATE_FILE, PROJECT_ROOT, command_path
 from research_mcp.providers import build_providers
+from research_mcp.query_expansion import expand_search_query
 from research_mcp.rate_limit import RateLimiter
 from research_mcp.ranking import dedupe_and_rank
 from research_mcp.settings import Settings, get_settings
@@ -439,7 +442,11 @@ class ResearchService:
         results = []
         coverage: list[ProviderCoverage] = []
         warnings: list[str] = []
+        provider_names = [name for name in provider_names if name in self.providers]
+        expanded_query = expand_search_query(query)
+        provider_queries = [query] if expanded_query == query else [query, expanded_query]
 
+        ready_provider_names: list[str] = []
         for provider_name in provider_names:
             provider = self.providers[provider_name]
             ready, message = provider.ready()
@@ -447,13 +454,45 @@ class ResearchService:
                 coverage.append(ProviderCoverage(provider=provider.name, status="skipped", message=message))
                 warnings.append(f"{provider.name}: {message}")
                 continue
-            try:
-                batch = provider.search(query=query, limit=fetch_limit, sort=sort)
-                coverage.append(ProviderCoverage(provider=provider.name, status="ok", result_count=len(batch)))
-                results.extend(batch)
-            except ProviderRequestError as exc:
-                coverage.append(ProviderCoverage(provider=provider.name, status="error", message=str(exc)))
-                warnings.append(f"{provider.name}: {exc}")
+            ready_provider_names.append(provider_name)
+
+        max_workers = min(max(int(self.settings.max_provider_workers), 1), max(len(ready_provider_names), 1))
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="scibudy-provider")
+        futures = {
+            executor.submit(self._search_one_provider, provider_name, provider_queries, fetch_limit, sort): provider_name
+            for provider_name in ready_provider_names
+        }
+        started_at = time.monotonic()
+        pending = set(futures)
+        wait_timeout = min(float(self.settings.search_total_timeout_sec), float(self.settings.provider_timeout_sec))
+        try:
+            for future in concurrent.futures.as_completed(futures, timeout=wait_timeout):
+                pending.discard(future)
+                provider_name = futures[future]
+                provider = self.providers[provider_name]
+                try:
+                    batch, elapsed_ms = future.result(timeout=0)
+                    coverage.append(ProviderCoverage(provider=provider.name, status="ok", result_count=len(batch), elapsed_ms=elapsed_ms))
+                    results.extend(batch)
+                except Exception as exc:  # noqa: BLE001
+                    elapsed_ms = int((time.monotonic() - started_at) * 1000)
+                    coverage.append(ProviderCoverage(provider=provider.name, status="error", message=str(exc), elapsed_ms=elapsed_ms))
+                    warnings.append(f"{provider.name}: {exc}")
+        except concurrent.futures.TimeoutError:
+            pass
+        finally:
+            for future in pending:
+                provider_name = futures[future]
+                provider = self.providers[provider_name]
+                elapsed_ms = int((time.monotonic() - started_at) * 1000)
+                future.cancel()
+                message = f"provider timed out after {wait_timeout:g}s"
+                coverage.append(ProviderCoverage(provider=provider.name, status="error", message=message, elapsed_ms=elapsed_ms))
+                warnings.append(f"{provider.name}: {message}")
+            executor.shutdown(wait=False, cancel_futures=True)
+
+        provider_order = {self.providers[name].name: index for index, name in enumerate(provider_names)}
+        coverage.sort(key=lambda item: provider_order.get(item.provider, len(provider_order)))
 
         ranked = dedupe_and_rank(results, query=query, sort=sort, limit=limit)
         return SearchResponse(
@@ -466,6 +505,17 @@ class ResearchService:
             warnings=warnings,
             results=ranked,
         )
+
+    def _search_one_provider(self, provider_name: str, queries: list[str], limit: int, sort: str) -> tuple[list, int]:
+        provider = self.providers[provider_name]
+        started_at = time.monotonic()
+        batch = []
+        for query in queries:
+            batch.extend(provider.search(query=query, limit=limit, sort=sort))
+        elapsed_ms = int((time.monotonic() - started_at) * 1000)
+        if elapsed_ms > int(self.settings.provider_timeout_sec * 1000):
+            raise ProviderRequestError(f"provider exceeded timeout budget of {self.settings.provider_timeout_sec:g}s")
+        return batch, elapsed_ms
 
     def _register_library(self, response: OrganizeLibraryResponse, results: list, *, name: str | None = None) -> str:
         root = Path(response.target_dir)
