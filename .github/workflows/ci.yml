@@ -26,7 +26,7 @@ jobs:
       - name: Compile Python package
         run: python -m compileall research_mcp
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
 
