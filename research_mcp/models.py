@@ -309,6 +309,7 @@ class AnalysisSummaryResponse(BaseModel):
     report_path: str | None = None
     key_points: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRecord] = Field(default_factory=list)
+    structured_payload: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -327,6 +328,9 @@ class AnalysisReportSummary(BaseModel):
         "topic_digest",
         "comparison_matrix",
         "reading_order",
+        "research_synthesis",
+        "claim_evidence_graph",
+        "calibration_protocol_digest",
     ]
     topic: str | None = None
     title: str
@@ -350,6 +354,7 @@ class AnalysisReportDetailResponse(BaseModel):
     summary: str | None = None
     key_points: list[str] = Field(default_factory=list)
     evidence: list[EvidenceRecord] = Field(default_factory=list)
+    structured_payload: dict[str, Any] = Field(default_factory=dict)
     message: str | None = None
 
 

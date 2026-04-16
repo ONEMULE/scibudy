@@ -178,6 +178,96 @@ def test_search_library_evidence_includes_scores_and_report_id(tmp_path):
     assert metadata.get("report_id") == response.report_id
 
 
+def test_build_research_synthesis_persists_structured_payload(tmp_path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        pages = {
+            "https://example.com/sbc": """
+                <html><body>
+                <h1>Simulation Based Calibration</h1>
+                <p>Abstract. We introduce simulation-based calibration diagnostics for posterior approximations.</p>
+                <p>Methods. The method evaluates coverage and rank statistics under repeated simulation.</p>
+                <p>Limitations. Diagnostics can miss model misspecification and correlated simulation failures.</p>
+                <p>Conclusion. SBC is a practical workflow for validating posterior calibration.</p>
+                </body></html>
+            """,
+            "https://example.com/npe": """
+                <html><body>
+                <h1>Neural Posterior Estimation Calibration</h1>
+                <p>Abstract. Neural posterior estimation needs calibration checks for amortized inference.</p>
+                <p>Methods. We propose coverage tests and posterior predictive simulation protocols.</p>
+                <p>Assumptions. The simulator and prior must represent the deployment setting.</p>
+                <p>Failure modes include biased posteriors, simulation mismatch, and poor tail coverage.</p>
+                </body></html>
+            """,
+        }
+        if str(request.url) in pages:
+            return httpx.Response(200, text=pages[str(request.url)], headers={"content-type": "text/html"})
+        return httpx.Response(404, text="missing")
+
+    settings = Settings(
+        RESEARCH_MCP_CACHE_DB_PATH=str(tmp_path / "state.db"),
+        RESEARCH_MCP_ANALYSIS_MODE="hybrid",
+        RESEARCH_MCP_COMPUTE_BACKEND="local",
+        RESEARCH_MCP_FORUM_ENRICHMENT_ENABLED="false",
+        RESEARCH_MCP_LOCAL_EMBEDDING_MODEL="hash-embedding-v1",
+    )
+    engine = AnalysisEngine(settings, tmp_path / "state.db", transport=httpx.MockTransport(handler))
+    items = [
+        LibraryItemEntry(
+            id="item1",
+            library_id="lib1",
+            rank=1,
+            title="Simulation Based Calibration",
+            effective_title="Simulation Based Calibration",
+            authors=["A. Author"],
+            source="OpenAlex",
+            landing_url="https://example.com/sbc",
+        ),
+        LibraryItemEntry(
+            id="item2",
+            library_id="lib1",
+            rank=2,
+            title="Neural Posterior Estimation Calibration",
+            effective_title="Neural Posterior Estimation Calibration",
+            authors=["B. Author"],
+            source="Semantic Scholar",
+            landing_url="https://example.com/npe",
+        ),
+    ]
+    for item in items:
+        assert engine.ingest_item("lib1", item, include_forums=False, reingest=True).extraction_status == "ready"
+    detail = LibraryDetailResponse(
+        status="ok",
+        generated_at="now",
+        library=LibrarySummary(
+            id="lib1",
+            name="SBI calibration",
+            slug="sbi-calibration",
+            source_kind="query",
+            source_ref="calibration",
+            root_path=str(tmp_path / "library"),
+            created_at="now",
+            updated_at="now",
+        ),
+        items=items,
+    )
+
+    response = engine.build_research_synthesis(detail, topic="calibration in simulation-based inference", max_items=50)
+
+    assert response.status == "ok"
+    payload = response.structured_payload
+    assert payload["schema_version"] == "research_synthesis.v1"
+    assert payload["analyzed_item_count"] == 2
+    assert len(payload["method_cards"]) == 2
+    assert payload["comparison_matrix"]
+    assert payload["claim_evidence_graph"]["claims"]
+    assert payload["calibration_protocol_digest"]["protocol_steps"]
+
+    report = engine.read_report(response.report_id)
+    assert report.status == "ok"
+    assert report.structured_payload["schema_version"] == "research_synthesis.v1"
+
+
 def test_openai_runtime_failure_falls_back_to_local(tmp_path):
     def handler(request: httpx.Request) -> httpx.Response:
         if str(request.url) == "https://example.com/paper":

@@ -305,6 +305,16 @@ def search_library_evidence(library_id: str, query: str, max_hits: int = 8) -> A
     return get_service().search_library_evidence(library_id, query, max_hits=max_hits)
 
 
+@app.tool(description="Build a structured cross-paper synthesis with method cards, comparison matrix, calibration digest, and claim/evidence graph.", structured_output=True, annotations=READ_ONLY_TOOL)
+def build_research_synthesis(library_id: str, topic: str, max_items: int = 50) -> AnalysisSummaryResponse:
+    return get_service().build_research_synthesis(library_id=library_id, topic=topic, max_items=max_items)
+
+
+@app.tool(description="Read one persisted structured synthesis report.", structured_output=True, annotations=READ_ONLY_TOOL)
+def read_synthesis_report(report_id: str) -> AnalysisReportDetailResponse:
+    return get_service().read_synthesis_report(report_id)
+
+
 @app.tool(description="List persisted analysis reports.", structured_output=True, annotations=READ_ONLY_TOOL)
 def list_analysis_reports(library_id: str | None = None, item_id: str | None = None) -> AnalysisReportsResponse:
     return get_service().list_analysis_reports(library_id=library_id, item_id=item_id)

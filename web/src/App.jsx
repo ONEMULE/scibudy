@@ -508,6 +508,18 @@ export default function App() {
                     >
                       Compare selected
                     </button>
+                    <button
+                      onClick={() =>
+                        loadAnalysis("build_research_synthesis", {
+                          library_id: selectedLibrary.id,
+                          topic: topicValue || "calibration",
+                          max_items: 50,
+                        })
+                      }
+                      disabled={busy}
+                    >
+                      Synthesize
+                    </button>
                   </div>
                 </div>
                 <div className="topicBar">
@@ -698,6 +710,56 @@ export default function App() {
                       </div>
                     </div>
                     <pre>{analysisResult.summary + "\n\n" + (analysisResult.key_points || []).map((p) => `- ${p}`).join("\n")}</pre>
+                    {analysisResult.structured_payload?.comparison_matrix?.length ? (
+                      <div className="structuredPanel">
+                        <h4>Comparison matrix</h4>
+                        <div className="tableWrap">
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Paper</th>
+                                <th>Method</th>
+                                <th>Protocol</th>
+                                <th>Limitations</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {analysisResult.structured_payload.comparison_matrix.slice(0, 8).map((row, index) => (
+                                <tr key={`${row.title}-${index}`}>
+                                  <td>{row.title}</td>
+                                  <td>{row.method}</td>
+                                  <td>{row.calibration_protocol}</td>
+                                  <td>{row.limitations}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                    {analysisResult.structured_payload?.method_cards?.length ? (
+                      <div className="structuredPanel">
+                        <h4>Method cards</h4>
+                        <div className="cardStack">
+                          {analysisResult.structured_payload.method_cards.slice(0, 6).map((card) => (
+                            <div key={card.item_id} className="methodCard">
+                              <strong>{card.title}</strong>
+                              <p>{card.method}</p>
+                              <div className="subtle">Failure modes: {card.failure_modes}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {analysisResult.structured_payload?.claim_evidence_graph?.claims?.length ? (
+                      <div className="structuredPanel">
+                        <h4>Claim/evidence graph</h4>
+                        <div className="subtle">
+                          {analysisResult.structured_payload.claim_evidence_graph.claims.length} claims linked to{" "}
+                          {analysisResult.structured_payload.claim_evidence_graph.edges?.length || 0} evidence edges.
+                        </div>
+                      </div>
+                    ) : null}
                     {(analysisResult.evidence || []).length ? (
                       <div className="evidenceList">
                         {(analysisResult.evidence || []).map((ev) => (
@@ -747,6 +809,7 @@ export default function App() {
                                 summary: result.summary,
                                 key_points: result.key_points || [],
                                 evidence: result.evidence || [],
+                                structured_payload: result.structured_payload || {},
                               });
                             })
                           }

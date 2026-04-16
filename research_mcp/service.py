@@ -276,6 +276,17 @@ class ResearchService:
     def search_library_evidence(self, library_id: str, query: str, max_hits: int = 8) -> AnalysisSummaryResponse:
         return self.analysis.search_library_evidence(self.read_library(library_id), query=query, max_hits=max_hits)
 
+    def build_research_synthesis(self, library_id: str, topic: str, max_items: int = 50) -> AnalysisSummaryResponse:
+        cleaned_topic = _validate_query(topic)
+        return self.analysis.build_research_synthesis(
+            self.read_library(library_id),
+            topic=cleaned_topic,
+            max_items=_validate_limit(max_items),
+        )
+
+    def read_synthesis_report(self, report_id: str) -> AnalysisReportDetailResponse:
+        return self.read_analysis_report(report_id)
+
     def list_analysis_reports(self, *, library_id: str | None = None, item_id: str | None = None) -> AnalysisReportsResponse:
         return self.analysis.list_reports(library_id=library_id, item_id=item_id)
 
@@ -422,6 +433,8 @@ class ResearchService:
                 "compare_library_items",
                 "analyze_library_topic",
                 "search_library_evidence",
+                "build_research_synthesis",
+                "read_synthesis_report",
                 "list_analysis_reports",
                 "read_analysis_report",
             ],

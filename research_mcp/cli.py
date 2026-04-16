@@ -143,6 +143,8 @@ def dispatch(args: argparse.Namespace) -> None:
         run_analyze_topic(args)
     elif args.command == "search-evidence":
         run_search_evidence(args)
+    elif args.command == "synthesize-library":
+        run_synthesize_library(args)
     elif args.command == "analysis-reports":
         run_analysis_reports(args)
     elif args.command == "analysis-report-show":
@@ -348,6 +350,12 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_parser.add_argument("query")
     evidence_parser.add_argument("--max-hits", type=int, default=8)
     evidence_parser.add_argument("--format", choices=["table", "json"], default="table")
+
+    synthesize_parser = subparsers.add_parser("synthesize-library", help="Build a structured cross-paper synthesis report for an ingested library.")
+    synthesize_parser.add_argument("library_id")
+    synthesize_parser.add_argument("topic")
+    synthesize_parser.add_argument("--max-items", type=int, default=50)
+    synthesize_parser.add_argument("--format", choices=["table", "json"], default="table")
 
     reports_parser = subparsers.add_parser("analysis-reports", help="List persisted analysis reports.")
     reports_parser.add_argument("--library-id")
@@ -693,6 +701,11 @@ def run_search_evidence(args: argparse.Namespace) -> None:
     print(format_analysis_summary_response(response.model_dump(mode="json"), fmt=args.format))
 
 
+def run_synthesize_library(args: argparse.Namespace) -> None:
+    response = ResearchService().build_research_synthesis(args.library_id, args.topic, max_items=args.max_items)
+    print(format_analysis_summary_response(response.model_dump(mode="json"), fmt=args.format))
+
+
 def run_analysis_reports(args: argparse.Namespace) -> None:
     response = ResearchService().list_analysis_reports(library_id=args.library_id, item_id=args.item_id)
     payload = response.model_dump(mode="json")
@@ -728,6 +741,7 @@ def run_analysis_report_show(args: argparse.Namespace) -> None:
                 "summary": payload.get("summary"),
                 "key_points": payload.get("key_points") or [],
                 "evidence": payload.get("evidence") or [],
+                "structured_payload": payload.get("structured_payload") or {},
             },
             fmt="table",
         ))

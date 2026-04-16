@@ -311,6 +311,13 @@ def format_analysis_summary_response(payload: dict[str, Any], *, fmt: str = "tab
     ]
     for point in payload.get("key_points") or []:
         lines.append(f"- {point}")
+    structured = payload.get("structured_payload") or {}
+    if structured:
+        lines.extend(["", "structured_payload: yes"])
+        if structured.get("analyzed_item_count") is not None:
+            lines.append(f"analyzed_item_count: {structured.get('analyzed_item_count')}")
+        if structured.get("schema_version"):
+            lines.append(f"schema_version: {structured.get('schema_version')}")
     evidence = payload.get("evidence") or []
     if evidence:
         lines.extend(["", "evidence:"])

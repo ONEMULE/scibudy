@@ -521,6 +521,175 @@ class AnalysisEngine:
             ],
         )
 
+    def build_research_synthesis(self, detail: LibraryDetailResponse, *, topic: str, max_items: int = 50) -> AnalysisSummaryResponse:
+        if detail.status != "ok" or not detail.library:
+            return AnalysisSummaryResponse(
+                status="error",
+                generated_at=now_utc_iso(),
+                analysis_mode=self.settings.analysis_mode,
+                compute_backend=self.settings.compute_backend,
+                title="Research synthesis",
+                summary="Library not found.",
+            )
+        selected_items = [item for item in detail.items if not item.archived][: max(1, min(int(max_items), 50))]
+        method_cards: list[dict[str, Any]] = []
+        matrix_rows: list[dict[str, Any]] = []
+        claims: list[dict[str, Any]] = []
+        edges: list[dict[str, str]] = []
+        evidence_records: list[EvidenceRecord] = []
+        warnings: list[str] = []
+
+        for item in selected_items:
+            chunks = self._load_chunks_for_item(item.id)
+            if not chunks:
+                warnings.append(f"{item.effective_title}: not ingested")
+                continue
+            selected_chunks = self._select_chunks(chunks, topic=topic, max_chunks=5)
+            fields = self._structured_item_fields(item.effective_title, selected_chunks, topic=topic)
+            chunk_evidence = [self._chunk_evidence_record(chunk, item) for chunk in selected_chunks[:3]]
+            evidence_records.extend(chunk_evidence)
+            card = {
+                "item_id": item.id,
+                "rank": item.rank,
+                "title": item.effective_title,
+                "source": item.source,
+                "year": item.year,
+                "doi": item.doi,
+                "problem": fields["problem"],
+                "method": fields["method"],
+                "protocol": fields["protocol"],
+                "assumptions": fields["assumptions"],
+                "failure_modes": fields["failure_modes"],
+                "limitations": fields["limitations"],
+                "practical_value": fields["practical_value"],
+                "evidence_ids": [ev.id for ev in chunk_evidence],
+            }
+            method_cards.append(card)
+            matrix_rows.append(
+                {
+                    "title": item.effective_title,
+                    "method": fields["method"],
+                    "calibration_protocol": fields["protocol"],
+                    "assumptions": fields["assumptions"],
+                    "failure_modes": fields["failure_modes"],
+                    "limitations": fields["limitations"],
+                    "practical_value": fields["practical_value"],
+                }
+            )
+            for claim_text, claim_type in [
+                (fields["method"], "method"),
+                (fields["protocol"], "calibration_protocol"),
+                (fields["failure_modes"], "failure_mode"),
+                (fields["limitations"], "limitation"),
+            ]:
+                claim_id = slugify(f"{item.id}-{claim_type}-{claim_text}", max_length=72)
+                claims.append(
+                    {
+                        "id": claim_id,
+                        "type": claim_type,
+                        "item_id": item.id,
+                        "title": item.effective_title,
+                        "claim": claim_text,
+                        "evidence_ids": [ev.id for ev in chunk_evidence],
+                        "confidence": self._claim_confidence(claim_text, chunk_evidence),
+                    }
+                )
+                for ev in chunk_evidence:
+                    edges.append({"claim_id": claim_id, "evidence_id": ev.id, "relation": "supports"})
+
+        if not method_cards:
+            return AnalysisSummaryResponse(
+                status="error",
+                generated_at=now_utc_iso(),
+                library_id=detail.library.id,
+                topic=topic,
+                analysis_mode=self.settings.analysis_mode,
+                compute_backend=self._effective_backend(),
+                title=f"{detail.library.name}: synthesis",
+                summary="No ingested items available. Run ingestion first.",
+                warnings=warnings,
+            )
+
+        protocol_digest = self._calibration_protocol_digest(method_cards, topic=topic)
+        structured_payload = {
+            "schema_version": "research_synthesis.v1",
+            "library_id": detail.library.id,
+            "library_name": detail.library.name,
+            "topic": topic,
+            "requested_max_items": max_items,
+            "analyzed_item_count": len(method_cards),
+            "method_cards": method_cards,
+            "comparison_matrix": matrix_rows,
+            "claim_evidence_graph": {"claims": claims, "edges": edges},
+            "calibration_protocol_digest": protocol_digest,
+            "warnings": warnings,
+        }
+        summary = self._synthesis_summary(detail.library.name, topic, method_cards, protocol_digest)
+        key_points = _dedupe(
+            [
+                f"Analyzed {len(method_cards)} ingested papers for {topic}.",
+                *protocol_digest["protocol_steps"][:4],
+                *protocol_digest["failure_modes"][:3],
+                *protocol_digest["practical_recommendations"][:3],
+            ]
+        )[:12]
+        report = self._persist_report(
+            analysis_kind="research_synthesis",
+            title=f"{detail.library.name}: {topic} synthesis",
+            summary=summary,
+            key_points=key_points,
+            evidence=evidence_records[:20],
+            library_id=detail.library.id,
+            topic=topic,
+            structured_payload=structured_payload,
+        )
+        self._persist_report(
+            analysis_kind="comparison_matrix",
+            title=f"{detail.library.name}: {topic} comparison matrix",
+            summary="Cross-paper method and calibration comparison matrix.",
+            key_points=[f"{row['title']}: {row['method'][:180]}" for row in matrix_rows[:12]],
+            evidence=evidence_records[:20],
+            library_id=detail.library.id,
+            topic=topic,
+            structured_payload={"schema_version": "comparison_matrix.v1", "rows": matrix_rows},
+        )
+        self._persist_report(
+            analysis_kind="claim_evidence_graph",
+            title=f"{detail.library.name}: {topic} claim/evidence graph",
+            summary="Structured claims linked to supporting evidence chunks.",
+            key_points=[claim["claim"] for claim in claims[:12]],
+            evidence=evidence_records[:20],
+            library_id=detail.library.id,
+            topic=topic,
+            structured_payload={"schema_version": "claim_evidence_graph.v1", "claims": claims, "edges": edges},
+        )
+        self._persist_report(
+            analysis_kind="calibration_protocol_digest",
+            title=f"{detail.library.name}: {topic} calibration protocol digest",
+            summary=protocol_digest["summary"],
+            key_points=protocol_digest["protocol_steps"] + protocol_digest["practical_recommendations"],
+            evidence=evidence_records[:20],
+            library_id=detail.library.id,
+            topic=topic,
+            structured_payload={"schema_version": "calibration_protocol_digest.v1", **protocol_digest},
+        )
+        return AnalysisSummaryResponse(
+            status="ok",
+            generated_at=now_utc_iso(),
+            library_id=detail.library.id,
+            topic=topic,
+            analysis_mode=self.settings.analysis_mode,
+            compute_backend=self._effective_backend(),
+            title=f"{detail.library.name}: {topic} synthesis",
+            summary=summary,
+            report_id=report.id,
+            report_path=report.report_path,
+            key_points=key_points,
+            evidence=evidence_records[:10],
+            structured_payload=structured_payload,
+            warnings=warnings,
+        )
+
     def list_reports(self, *, library_id: str | None = None, item_id: str | None = None) -> AnalysisReportsResponse:
         query = "SELECT * FROM analysis_reports"
         clauses = []
@@ -552,6 +721,7 @@ class AnalysisEngine:
             summary=row["summary"],
             key_points=json.loads(row["key_points_json"] or "[]"),
             evidence=[EvidenceRecord.model_validate(item) for item in json.loads(row["evidence_json"] or "[]")],
+            structured_payload=json.loads(row["structured_payload_json"] or "{}"),
         )
 
     def _init_schema(self) -> None:
@@ -612,6 +782,7 @@ class AnalysisEngine:
                     summary TEXT NOT NULL,
                     key_points_json TEXT NOT NULL DEFAULT '[]',
                     evidence_json TEXT NOT NULL DEFAULT '[]',
+                    structured_payload_json TEXT NOT NULL DEFAULT '{}',
                     report_path TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
@@ -623,6 +794,7 @@ class AnalysisEngine:
             self._ensure_column("item_chunks", "embedding_model", "TEXT")
             self._ensure_column("item_chunks", "embedding_dimension", "INTEGER")
             self._ensure_column("item_chunks", "chunking_version", "TEXT")
+            self._ensure_column("analysis_reports", "structured_payload_json", "TEXT NOT NULL DEFAULT '{}'")
 
     def _ensure_column(self, table: str, column: str, column_type: str) -> None:
         existing = {row["name"] for row in self._conn.execute(f"PRAGMA table_info({table})").fetchall()}
@@ -1036,6 +1208,66 @@ class AnalysisEngine:
         }
         return fields
 
+    def _chunk_evidence_record(self, chunk: ChunkRecord, item: LibraryItemEntry) -> EvidenceRecord:
+        relevance = round((chunk.lexical_score or 0.0) * 0.6 + (chunk.semantic_score or 0.0) * 0.4, 6)
+        confidence = round(max(chunk.lexical_score or 0.0, chunk.semantic_score or 0.0, 0.25), 6)
+        return EvidenceRecord(
+            id=chunk.id,
+            item_id=item.id,
+            source_type="pdf" if chunk.section != "html" else "html",
+            title=f"{item.effective_title}: chunk {chunk.chunk_index} [{chunk.section}]",
+            url=item.landing_url or item.open_access_url or item.pdf_url,
+            excerpt=chunk.text[:420],
+            relevance_score=relevance,
+            confidence_score=confidence,
+            metadata={
+                "rank": item.rank,
+                "source": item.source,
+                "year": item.year,
+                "doi": item.doi,
+                "section": chunk.section,
+                "chunk_index": chunk.chunk_index,
+                "lexical_score": round(chunk.lexical_score or 0.0, 6),
+                "semantic_score": round(chunk.semantic_score or 0.0, 6),
+                "semantic_backend": self._semantic_backend_label(),
+                "embedding_backend": chunk.embedding_backend,
+                "embedding_model": chunk.embedding_model,
+            },
+        )
+
+    def _claim_confidence(self, claim: str, evidence: list[EvidenceRecord]) -> float:
+        if claim.startswith("Failure modes are not") or claim.startswith("Limitations were not"):
+            return 0.35
+        if not evidence:
+            return 0.45
+        return round(min(0.95, max(ev.confidence_score or 0.0 for ev in evidence)), 3)
+
+    def _calibration_protocol_digest(self, method_cards: list[dict[str, Any]], *, topic: str) -> dict[str, list[str] | str]:
+        protocols = _dedupe([card["protocol"] for card in method_cards])
+        assumptions = _dedupe([card["assumptions"] for card in method_cards])
+        failure_modes = _dedupe([card["failure_modes"] for card in method_cards])
+        limitations = _dedupe([card["limitations"] for card in method_cards])
+        practical = _dedupe([card["practical_value"] for card in method_cards])
+        return {
+            "summary": f"{topic} synthesis across {len(method_cards)} ingested papers, emphasizing calibration protocol, assumptions, and failure modes.",
+            "protocol_steps": protocols[:8] or ["No explicit calibration protocol steps were detected."],
+            "assumptions": assumptions[:8] or ["Assumptions require manual verification."],
+            "failure_modes": failure_modes[:8] or ["Failure modes require manual verification."],
+            "limitations": limitations[:8] or ["Limitations require manual verification."],
+            "practical_recommendations": practical[:8] or ["Inspect method cards before applying these methods."],
+        }
+
+    def _synthesis_summary(self, library_name: str, topic: str, method_cards: list[dict[str, Any]], protocol_digest: dict[str, Any]) -> str:
+        top_methods = "; ".join(card["method"] for card in method_cards[:3])
+        top_protocols = "; ".join(protocol_digest.get("protocol_steps", [])[:3])
+        top_failures = "; ".join(protocol_digest.get("failure_modes", [])[:3])
+        return (
+            f"{library_name} synthesis for {topic}. "
+            f"Main method signals: {top_methods}. "
+            f"Calibration/evaluation protocols: {top_protocols}. "
+            f"Observed failure or risk signals: {top_failures}."
+        )
+
     def _reading_order_points(self, items: list[LibraryItemEntry], *, topic: str | None) -> list[str]:
         points = []
         for index, item in enumerate(items[:8], start=1):
@@ -1247,6 +1479,7 @@ class AnalysisEngine:
         library_id: str | None = None,
         item_id: str | None = None,
         topic: str | None = None,
+        structured_payload: dict[str, Any] | None = None,
     ) -> AnalysisReportSummary:
         now = now_utc_iso()
         report_id = slugify(f"{analysis_kind}-{title}-{now}", max_length=48)
@@ -1269,6 +1502,7 @@ class AnalysisEngine:
                     "summary": summary,
                     "key_points": key_points,
                     "evidence": [ev.model_dump(mode="json") for ev in evidence],
+                    "structured_payload": structured_payload or {},
                     "analysis_kind": analysis_kind,
                     "library_id": library_id,
                     "item_id": item_id,
@@ -1286,9 +1520,9 @@ class AnalysisEngine:
                 """
                 INSERT OR REPLACE INTO analysis_reports(
                     id, library_id, item_id, analysis_kind, topic, title, analysis_mode,
-                    compute_backend, summary, key_points_json, evidence_json, report_path,
+                    compute_backend, summary, key_points_json, evidence_json, structured_payload_json, report_path,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     report_id,
@@ -1302,6 +1536,7 @@ class AnalysisEngine:
                     summary,
                     json.dumps(key_points, ensure_ascii=False),
                     json.dumps([ev.model_dump(mode="json") for ev in evidence], ensure_ascii=False),
+                    json.dumps(structured_payload or {}, ensure_ascii=False),
                     str(report_path),
                     now,
                     now,

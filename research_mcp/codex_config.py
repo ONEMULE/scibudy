@@ -56,6 +56,8 @@ def render_managed_block() -> str:
             '  "compare_library_items",',
             '  "analyze_library_topic",',
             '  "search_library_evidence",',
+            '  "build_research_synthesis",',
+            '  "read_synthesis_report",',
             '  "list_analysis_reports",',
             '  "read_analysis_report",',
             "]",
