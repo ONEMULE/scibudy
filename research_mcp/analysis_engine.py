@@ -1174,7 +1174,8 @@ class AnalysisEngine:
             return []
 
     def _reddit_evidence(self, item_id: str, query: str) -> list[EvidenceRecord]:
-        url = f"https://www.reddit.com/search.json?q={quote_plus('\"' + query + '\"')}&limit=6&sort=relevance"
+        quoted_query = f'"{query}"'
+        url = f"https://www.reddit.com/search.json?q={quote_plus(quoted_query)}&limit=6&sort=relevance"
         try:
             response = self._http.get(url, headers={"User-Agent": self.settings.user_agent})
             response.raise_for_status()

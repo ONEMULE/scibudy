@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import math
 import re
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+import math
 from typing import Any
 
 
@@ -11,7 +11,7 @@ TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def now_utc_iso() -> str:
-    return datetime.now(tz=UTC).replace(microsecond=0).isoformat()
+    return datetime.now(tz=timezone.utc).replace(microsecond=0).isoformat()
 
 
 def normalize_whitespace(value: str | None) -> str | None:

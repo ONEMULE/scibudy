@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from research_mcp.models import LiteratureResult
 from research_mcp.query_expansion import domain_phrase_hits, is_sbi_calibration_query
@@ -212,7 +212,7 @@ def _safe_int(value) -> int | None:
 
 
 def _recency_key(result: LiteratureResult) -> float:
-    current_year = datetime.now(tz=UTC).year
+    current_year = datetime.now(tz=timezone.utc).year
     year = result.year or year_from_any(result.published_date)
     if not year:
         return 0.0
