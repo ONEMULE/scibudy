@@ -532,7 +532,8 @@ class AnalysisEngine:
                 title="Research synthesis",
                 summary="Library not found.",
             )
-        domain_profile = resolve_domain_profile(profile, topic)
+        profile_resolution = resolve_domain_profile(profile, topic)
+        domain_profile = profile_resolution.resolved_profile
         selected_items = [item for item in detail.items if not item.archived][: max(1, min(int(max_items), 50))]
         method_cards: list[dict[str, Any]] = []
         matrix_rows: list[dict[str, Any]] = []
@@ -651,7 +652,11 @@ class AnalysisEngine:
             "library_id": detail.library.id,
             "library_name": detail.library.name,
             "topic": topic,
-            "profile": domain_profile.name,
+            "requested_profile": profile_resolution.requested_profile,
+            "resolved_profile": domain_profile.id,
+            "profile_source": profile_resolution.profile_source,
+            "profile_description": domain_profile.description,
+            "profile": domain_profile.id,
             "requested_max_items": max_items,
             "selected_item_count": len(selected_items),
             "analyzed_item_count": len(method_cards),
@@ -1110,7 +1115,7 @@ class AnalysisEngine:
     def _rank_chunks(self, chunks: list[ChunkRecord], *, topic: str, profile: DomainProfile | None = None) -> list[ChunkRecord]:
         if not chunks:
             return []
-        domain_profile = profile or resolve_domain_profile("auto", topic)
+        domain_profile = profile or resolve_domain_profile("auto", topic).resolved_profile
         lexical_rows = self._lexical_rank(chunks, topic)
         lexical_scores = {chunk.id: score for score, chunk in lexical_rows}
         semantic_scores: dict[str, float] = {}

@@ -19,6 +19,7 @@ from research_mcp.formatters import (
     format_ingest_response,
     format_context_bundle_response,
     format_download_batch_response,
+    format_domain_profiles_response,
     format_libraries_response,
     format_library_detail_response,
     format_mutation_response,
@@ -145,6 +146,8 @@ def dispatch(args: argparse.Namespace) -> None:
         run_search_evidence(args)
     elif args.command == "synthesize-library":
         run_synthesize_library(args)
+    elif args.command == "profiles":
+        run_profiles(args)
     elif args.command == "analysis-reports":
         run_analysis_reports(args)
     elif args.command == "analysis-report-show":
@@ -357,6 +360,9 @@ def build_parser() -> argparse.ArgumentParser:
     synthesize_parser.add_argument("--max-items", type=int, default=50)
     synthesize_parser.add_argument("--profile", choices=["auto", "general", "sbi_calibration"], default="auto")
     synthesize_parser.add_argument("--format", choices=["table", "json"], default="table")
+
+    profiles_parser = subparsers.add_parser("profiles", help="List available synthesis domain profiles.")
+    profiles_parser.add_argument("--format", choices=["table", "json"], default="table")
 
     reports_parser = subparsers.add_parser("analysis-reports", help="List persisted analysis reports.")
     reports_parser.add_argument("--library-id")
@@ -705,6 +711,11 @@ def run_search_evidence(args: argparse.Namespace) -> None:
 def run_synthesize_library(args: argparse.Namespace) -> None:
     response = ResearchService().build_research_synthesis(args.library_id, args.topic, max_items=args.max_items, profile=args.profile)
     print(format_analysis_summary_response(response.model_dump(mode="json"), fmt=args.format))
+
+
+def run_profiles(args: argparse.Namespace) -> None:
+    response = ResearchService().list_domain_profiles()
+    print(format_domain_profiles_response(response.model_dump(mode="json"), fmt=args.format))
 
 
 def run_analysis_reports(args: argparse.Namespace) -> None:

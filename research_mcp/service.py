@@ -21,6 +21,7 @@ from research_mcp.models import (
     AnalysisSummaryResponse,
     ContextBundleResponse,
     DownloadBatchResponse,
+    DomainProfilesResponse,
     HealthCheckResponse,
     IngestResponse,
     LibrariesResponse,
@@ -35,6 +36,7 @@ from research_mcp.models import (
 )
 from research_mcp.paths import APP_HOME, CODEX_CONFIG_FILE, ENV_FILE, INSTALL_STATE_FILE, PROJECT_ROOT, command_path
 from research_mcp.providers import build_providers
+from research_mcp.domain_profiles import list_domain_profiles, profile_choices
 from research_mcp.query_expansion import expand_search_query
 from research_mcp.rate_limit import RateLimiter
 from research_mcp.ranking import dedupe_and_rank
@@ -288,6 +290,9 @@ class ResearchService:
     def read_synthesis_report(self, report_id: str) -> AnalysisReportDetailResponse:
         return self.read_analysis_report(report_id)
 
+    def list_domain_profiles(self) -> DomainProfilesResponse:
+        return DomainProfilesResponse(status="ok", generated_at=now_utc_iso(), profiles=list_domain_profiles())
+
     def list_analysis_reports(self, *, library_id: str | None = None, item_id: str | None = None) -> AnalysisReportsResponse:
         return self.analysis.list_reports(library_id=library_id, item_id=item_id)
 
@@ -436,6 +441,7 @@ class ResearchService:
                 "search_library_evidence",
                 "build_research_synthesis",
                 "read_synthesis_report",
+                "list_domain_profiles",
                 "list_analysis_reports",
                 "read_analysis_report",
             ],
@@ -594,8 +600,8 @@ def _validate_sort(sort: str) -> str:
 
 def _validate_profile(profile: str) -> str:
     normalized = (profile or "auto").strip().lower()
-    if normalized not in {"auto", "general", "sbi_calibration"}:
-        raise ValueError("profile must be one of: auto, general, sbi_calibration")
+    if normalized not in set(profile_choices()):
+        raise ValueError(f"profile must be one of: {', '.join(profile_choices())}")
     return normalized
 
 

@@ -32,6 +32,24 @@ Important analysis settings:
 - `forum_source_profile`
 - local embedding/reranker model settings
 
+## Domain profiles
+
+Domain profiles affect only full-text synthesis. They do not constrain the scholarly search providers or the subject scope of `search_literature`.
+
+Available synthesis profiles:
+
+- `general`: default all-domain evidence extraction profile.
+- `auto`: resolves a profile from the topic and records both the requested and resolved profile in the synthesis payload.
+- `sbi_calibration`: example preset for simulation-based inference calibration evidence extraction.
+
+Use:
+
+```bash
+scibudy profiles
+scibudy synthesize-library <library_id> "causal inference robustness" --profile general
+scibudy synthesize-library <library_id> "calibration in simulation-based inference" --profile sbi_calibration
+```
+
 ## Runtime state
 
 The app home stores:

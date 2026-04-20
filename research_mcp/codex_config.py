@@ -58,6 +58,7 @@ def render_managed_block() -> str:
             '  "search_library_evidence",',
             '  "build_research_synthesis",',
             '  "read_synthesis_report",',
+            '  "list_domain_profiles",',
             '  "list_analysis_reports",',
             '  "read_analysis_report",',
             "]",

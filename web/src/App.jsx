@@ -59,6 +59,7 @@ export default function App() {
   const [analysisSettings, setAnalysisSettings] = useState(null);
   const [analysisReports, setAnalysisReports] = useState([]);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
+  const [synthesisProfile, setSynthesisProfile] = useState("auto");
 
   useEffect(() => {
     refresh();
@@ -514,6 +515,7 @@ export default function App() {
                           library_id: selectedLibrary.id,
                           topic: topicValue || "calibration",
                           max_items: 50,
+                          profile: synthesisProfile,
                         })
                       }
                       disabled={busy}
@@ -524,6 +526,11 @@ export default function App() {
                 </div>
                 <div className="topicBar">
                   <input value={topicValue} onChange={(e) => setTopicValue(e.target.value)} placeholder="Topic for synthesis, e.g. calibration or posterior coverage" />
+                  <select value={synthesisProfile} onChange={(e) => setSynthesisProfile(e.target.value)}>
+                    <option value="auto">Auto profile</option>
+                    <option value="general">General</option>
+                    <option value="sbi_calibration">SBI calibration example</option>
+                  </select>
                   <button
                       onClick={() =>
                         loadAnalysis("analyze_library_topic", {
@@ -712,6 +719,9 @@ export default function App() {
                     <pre>{analysisResult.summary + "\n\n" + (analysisResult.key_points || []).map((p) => `- ${p}`).join("\n")}</pre>
                     {analysisResult.structured_payload?.comparison_matrix?.length ? (
                       <div className="structuredPanel">
+                        <div className="subtle">
+                          requested profile={analysisResult.structured_payload.requested_profile || analysisResult.structured_payload.profile || "n/a"} | resolved profile={analysisResult.structured_payload.resolved_profile || analysisResult.structured_payload.profile || "n/a"}
+                        </div>
                         <h4>Comparison matrix</h4>
                         <div className="tableWrap">
                           <table>

@@ -93,8 +93,21 @@ scibudy collect "simulation-based calibration" --target-dir ~/Desktop/sbc-librar
 scibudy analysis-settings
 scibudy ingest-library <library_id>
 scibudy search-evidence <library_id> calibration
+scibudy profiles
+scibudy synthesize-library <library_id> "causal inference robustness" --profile general
+scibudy synthesize-library <library_id> "calibration in simulation-based inference" --profile sbi_calibration
 scibudy ui --open
 ```
+
+## Domain profiles
+
+Domain profiles do **not** limit Scibudy's search scope or providers. Search remains general and multi-source by default.
+
+Profiles only tune full-text synthesis: section weighting, evidence markers, unsupported-claim detection, and risk flags.
+
+- `general`: default all-domain synthesis profile.
+- `auto`: chooses a synthesis profile from the topic while preserving general search.
+- `sbi_calibration`: an example preset for simulation-based inference calibration workflows.
 
 For more examples and Codex prompt patterns:
 

@@ -154,7 +154,7 @@ h1, h2, h3, h4 { margin: 0; }
 }
 .topicBar {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 220px auto auto;
   gap: 10px;
   margin: 12px 0;
 }

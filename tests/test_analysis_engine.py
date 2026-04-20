@@ -257,6 +257,9 @@ def test_build_research_synthesis_persists_structured_payload(tmp_path):
     assert response.status == "ok"
     payload = response.structured_payload
     assert payload["schema_version"] == "research_synthesis.v1"
+    assert payload["requested_profile"] == "auto"
+    assert payload["resolved_profile"] == "sbi_calibration"
+    assert payload["profile_source"] == "auto"
     assert payload["profile"] == "sbi_calibration"
     assert payload["analyzed_item_count"] == 2
     assert payload["evidence_coverage"]["evidence_backed_item_count"] == 2
@@ -271,6 +274,56 @@ def test_build_research_synthesis_persists_structured_payload(tmp_path):
     report = engine.read_report(response.report_id)
     assert report.status == "ok"
     assert report.structured_payload["schema_version"] == "research_synthesis.v1"
+
+
+def test_general_profile_stays_general_for_non_sbi_topic(tmp_path):
+    settings = Settings(
+        RESEARCH_MCP_CACHE_DB_PATH=str(tmp_path / "state.db"),
+        RESEARCH_MCP_ANALYSIS_MODE="rules",
+        RESEARCH_MCP_COMPUTE_BACKEND="local",
+        RESEARCH_MCP_FORUM_ENRICHMENT_ENABLED="false",
+        RESEARCH_MCP_LOCAL_EMBEDDING_MODEL="hash-embedding-v1",
+    )
+    engine = AnalysisEngine(settings, tmp_path / "state.db")
+    item = LibraryItemEntry(
+        id="item1",
+        library_id="lib1",
+        rank=1,
+        title="Causal Inference Robustness",
+        effective_title="Causal Inference Robustness",
+        authors=[],
+        source="OpenAlex",
+    )
+    text_path = engine._write_text("lib1", "item1", "Methods. We compare robustness checks for causal inference. Results. Sensitivity analysis reveals limitations.")
+    engine._store_ingest(
+        item=item,
+        library_id="lib1",
+        source_label="test",
+        text_path=text_path,
+        chunks=engine._chunk_text("item1", text_path.read_text(encoding="utf-8")),
+        discussion=[],
+    )
+    detail = LibraryDetailResponse(
+        status="ok",
+        generated_at="now",
+        library=LibrarySummary(
+            id="lib1",
+            name="General library",
+            slug="general-library",
+            source_kind="query",
+            source_ref="causal inference",
+            root_path=str(tmp_path / "library"),
+            created_at="now",
+            updated_at="now",
+        ),
+        items=[item],
+    )
+
+    response = engine.build_research_synthesis(detail, topic="causal inference robustness", profile="auto")
+
+    assert response.structured_payload["requested_profile"] == "auto"
+    assert response.structured_payload["resolved_profile"] == "general"
+    assert response.structured_payload["profile_source"] == "auto"
 
 
 def test_build_research_synthesis_tracks_missing_fulltext_and_unsupported_claims(tmp_path):

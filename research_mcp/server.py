@@ -16,6 +16,7 @@ from research_mcp.models import (
     AnalysisReportsResponse,
     AnalysisSummaryResponse,
     ContextBundleResponse,
+    DomainProfilesResponse,
     DownloadBatchResponse,
     HealthCheckResponse,
     IngestResponse,
@@ -308,6 +309,11 @@ def search_library_evidence(library_id: str, query: str, max_hits: int = 8) -> A
 @app.tool(description="Build a structured cross-paper synthesis with method cards, comparison matrix, calibration digest, and claim/evidence graph.", structured_output=True, annotations=READ_ONLY_TOOL)
 def build_research_synthesis(library_id: str, topic: str, max_items: int = 50, profile: str = "auto") -> AnalysisSummaryResponse:
     return get_service().build_research_synthesis(library_id=library_id, topic=topic, max_items=max_items, profile=profile)
+
+
+@app.tool(description="List available synthesis domain profiles. Profiles affect evidence extraction, not search scope.", structured_output=True, annotations=READ_ONLY_TOOL)
+def list_domain_profiles() -> DomainProfilesResponse:
+    return get_service().list_domain_profiles()
 
 
 @app.tool(description="Read one persisted structured synthesis report.", structured_output=True, annotations=READ_ONLY_TOOL)

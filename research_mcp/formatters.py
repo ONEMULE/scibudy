@@ -339,6 +339,25 @@ def format_analysis_summary_response(payload: dict[str, Any], *, fmt: str = "tab
     return "\n".join(lines)
 
 
+def format_domain_profiles_response(payload: dict[str, Any], *, fmt: str = "table") -> str:
+    if fmt == "json":
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+    profiles = payload.get("profiles") or []
+    return _render_table(
+        ["ID", "Label", "Scope", "Example", "Description"],
+        [
+            [
+                item.get("id") or item.get("name") or "",
+                item.get("label") or "",
+                item.get("scope") or "",
+                "Y" if item.get("is_example") else "",
+                _truncate(item.get("description") or "", 72),
+            ]
+            for item in profiles
+        ],
+    )
+
+
 def format_run_list(items: list[dict[str, Any]], *, fmt: str = "table") -> str:
     if fmt == "json":
         return json.dumps(items, indent=2, ensure_ascii=False)

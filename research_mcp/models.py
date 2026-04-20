@@ -358,6 +358,12 @@ class AnalysisReportDetailResponse(BaseModel):
     message: str | None = None
 
 
+class DomainProfilesResponse(BaseModel):
+    status: Literal["ok", "error"]
+    generated_at: str
+    profiles: list[dict[str, Any]] = Field(default_factory=list)
+
+
 # Backward-compatible aliases for older CLI/service code paths.
 LibraryListResponse = LibrariesResponse
 LibraryItemRecord = LibraryItemEntry
