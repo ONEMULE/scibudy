@@ -26,6 +26,9 @@ jobs:
       - name: Compile Python package
         run: python -m compileall research_mcp
 
+      - name: Agent workflow smoke
+        run: python scripts/check_agent_workflow.py
+
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
