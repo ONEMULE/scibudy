@@ -36,7 +36,7 @@ def check_url(url: str, *, retries: int, delay: float) -> tuple[bool, str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="https://onemule.github.io/scibudy/")
+    parser.add_argument("--base-url", default="https://onemule.github.io/SciBudy/")
     parser.add_argument("--retries", type=int, default=3)
     parser.add_argument("--delay", type=float, default=5.0)
     args = parser.parse_args()
