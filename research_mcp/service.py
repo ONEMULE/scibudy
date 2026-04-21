@@ -1168,6 +1168,8 @@ def _is_dangerous_path(path: Path) -> bool:
         resolved = path.resolve()
     except Exception:
         resolved = path
+    if resolved.anchor and resolved == Path(resolved.anchor):
+        return True
     dangerous = {Path("/"), Path("/etc"), Path("/usr"), Path("/bin"), Path("/sbin"), Path("/var"), Path("/opt")}
     if resolved in dangerous:
         return True

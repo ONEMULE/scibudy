@@ -1,6 +1,7 @@
 from research_mcp.service import ResearchService
 from research_mcp.settings import Settings
 import research_mcp.service as service_module
+import os
 
 
 class StubProvider:
@@ -91,6 +92,8 @@ def test_health_check_does_not_degrade_for_ready_public_provider(tmp_path):
 
 
 def test_security_check_warns_for_broad_env_permissions(tmp_path, monkeypatch):
+    if os.name == "nt":
+        return
     env_file = tmp_path / ".env"
     env_file.write_text('OPENALEX_API_KEY="x"\n', encoding="utf-8")
     env_file.chmod(0o644)
@@ -131,7 +134,8 @@ def test_security_check_errors_for_dangerous_app_home(tmp_path, monkeypatch):
     codex_config.write_text("[mcp_servers.research]\n", encoding="utf-8")
     monkeypatch.setattr(service_module, "ENV_FILE", env_file)
     monkeypatch.setattr(service_module, "CODEX_CONFIG_FILE", codex_config)
-    monkeypatch.setattr(service_module, "APP_HOME", service_module.Path("/"))
+    dangerous_root = service_module.Path(service_module.Path.cwd().anchor or "/")
+    monkeypatch.setattr(service_module, "APP_HOME", dangerous_root)
     service = ResearchService(settings=Settings(RESEARCH_MCP_CACHE_DB_PATH=str(tmp_path / "state.db")), providers={}, oa_resolver=StubResolver())
 
     response = service.security_check()
