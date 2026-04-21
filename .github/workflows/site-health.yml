@@ -14,4 +14,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Check Pages site
-        run: python scripts/check_site.py --base-url https://onemule.github.io/scibudy/
+        run: python scripts/check_site.py --base-url https://onemule.github.io/SciBudy/
