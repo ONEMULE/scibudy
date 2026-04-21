@@ -35,6 +35,13 @@ scibudy workflow "calibration methods in simulation-based inference" --dry-run
 scibudy workflow "calibration methods in simulation-based inference" --quality-mode fast
 ```
 
+在让 agent 自动执行前检查本地安全性和安装准备状态：
+
+```bash
+scibudy security-audit
+scibudy doctor --install-readiness
+```
+
 ## 做主题分析
 
 ```bash

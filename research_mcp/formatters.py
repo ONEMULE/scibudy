@@ -208,6 +208,24 @@ def format_provider_statuses(payload: dict[str, Any], *, fmt: str = "table") -> 
     return _render_table(headers, rows)
 
 
+def format_diagnostic_response(payload: dict[str, Any], *, fmt: str = "table") -> str:
+    if fmt == "json":
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+    checks = payload.get("checks") or []
+    lines = [f"status: {payload.get('status', '')}", ""]
+    rows = [
+        [
+            item.get("id") or "",
+            item.get("status") or "",
+            _truncate(item.get("message") or "", 72),
+            _truncate(item.get("recommendation") or "", 72),
+        ]
+        for item in checks
+    ]
+    lines.append(_render_table(["Check", "Status", "Message", "Recommendation"], rows))
+    return "\n".join(lines)
+
+
 def format_libraries_response(payload: dict[str, Any], *, fmt: str = "table") -> str:
     if fmt == "json":
         return json.dumps(payload, indent=2, ensure_ascii=False)

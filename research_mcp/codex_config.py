@@ -32,6 +32,7 @@ def render_managed_block() -> str:
             '  "search_source",',
             '  "resolve_open_access",',
             '  "health_check",',
+            '  "security_check",',
             '  "download_pdfs",',
             '  "organize_library",',
             '  "collect_library",',

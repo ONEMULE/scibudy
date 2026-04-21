@@ -20,6 +20,8 @@ function parseArgs(argv) {
     upgrade: false,
     installCodex: true,
     noPrompt: false,
+    doctorOnly: false,
+    printPlan: false,
     help: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -30,6 +32,8 @@ function parseArgs(argv) {
     else if (arg === "--from-path") args.fromPath = argv[++i];
     else if (arg === "--upgrade") args.upgrade = true;
     else if (arg === "--no-prompt") args.noPrompt = true;
+    else if (arg === "--doctor-only") args.doctorOnly = true;
+    else if (arg === "--print-plan") args.printPlan = true;
     else if (arg === "--no-install-codex") args.installCodex = false;
     else if (arg === "--help" || arg === "-h") args.help = true;
   }
@@ -67,6 +71,8 @@ Common options:
   --from-path /path/to/local/source/checkout
   --upgrade
   --no-prompt
+  --doctor-only
+  --print-plan
   --no-install-codex
 
 Profiles:
@@ -107,11 +113,30 @@ function hasCodex() {
 }
 
 function normalizeProfile(args) {
+  validateAppHome(args.appHome);
   if (args.profile === "gpu-local" && (!isLinux() || !hasNvidia())) {
     throw new Error("The gpu-local profile currently requires Linux with an NVIDIA GPU. Use --profile base or --profile analysis on this machine.");
   }
   if (args.profile === "full" && (!isLinux() || !hasNvidia())) {
     console.log("Full profile requested on a machine without the supported Linux+NVIDIA local-model path. Continuing with the non-GPU parts of the install.");
+  }
+}
+
+function validateAppHome(appHome) {
+  const resolved = path.resolve(appHome);
+  const root = path.parse(resolved).root;
+  const dangerous = new Set([
+    root,
+    path.resolve(root, "etc"),
+    path.resolve(root, "usr"),
+    path.resolve(root, "bin"),
+    path.resolve(root, "sbin"),
+    path.resolve(root, "var"),
+    path.resolve(root, "opt"),
+    path.dirname(os.homedir()),
+  ]);
+  if (dangerous.has(resolved)) {
+    throw new Error(`Refusing dangerous --app-home path: ${resolved}`);
   }
 }
 
@@ -127,6 +152,35 @@ function printPreflight(args, pythonInfo) {
   console.log(`- prompt for secrets: ${args.noPrompt ? "no" : "yes"}`);
   console.log(`- install source: ${args.fromPath ? path.resolve(args.fromPath) : `${manifest.python.package_name}@${manifest.python.version}`}`);
   console.log("");
+}
+
+function printInstallPlan(args, pythonInfo) {
+  const runtimeVenv = path.join(args.appHome, "runtime", ".venv");
+  const runtimePython = process.platform === "win32"
+    ? path.join(runtimeVenv, "Scripts", "python.exe")
+    : path.join(runtimeVenv, "bin", "python");
+  console.log("Scibudy install plan");
+  console.log(`- profile: ${args.profile}`);
+  console.log(`- app home: ${args.appHome}`);
+  console.log(`- runtime venv: ${runtimeVenv}`);
+  console.log(`- runtime python: ${runtimePython}`);
+  console.log(`- installer python: ${pythonInfo.command} (${pythonInfo.version})`);
+  console.log(`- install source: ${args.fromPath ? path.resolve(args.fromPath) : `${manifest.python.package_name}@${manifest.python.version}`}`);
+  console.log(`- will create/update runtime venv: yes`);
+  console.log(`- will install Codex config: ${args.installCodex ? "yes" : "no"}`);
+  console.log(`- will prompt for secrets: ${args.noPrompt ? "no" : "yes"}`);
+}
+
+function printDoctorOnly(args, pythonInfo) {
+  console.log("Scibudy installer readiness");
+  console.log(`- node: ${process.version}`);
+  console.log(`- python: ${pythonInfo.command} (${pythonInfo.version})`);
+  console.log(`- platform: ${process.platform}`);
+  console.log(`- app home: ${args.appHome}`);
+  console.log(`- app home safety: ok`);
+  console.log(`- nvidia gpu detected: ${hasNvidia() ? "yes" : "no"}`);
+  console.log(`- codex detected: ${hasCodex() ? "yes" : "no"}`);
+  console.log("- doctor-only: no files were written");
 }
 
 function run(command, args, options = {}) {
@@ -162,6 +216,14 @@ function main() {
   normalizeProfile(args);
   const python = findPython(args.python);
   printPreflight(args, python);
+  if (args.doctorOnly) {
+    printDoctorOnly(args, python);
+    return;
+  }
+  if (args.printPlan) {
+    printInstallPlan(args, python);
+    return;
+  }
   const runtimeVenv = path.join(args.appHome, "runtime", ".venv");
   const runtimePython = process.platform === "win32"
     ? path.join(runtimeVenv, "Scripts", "python.exe")

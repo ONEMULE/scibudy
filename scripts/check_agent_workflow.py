@@ -80,6 +80,8 @@ def main() -> None:
         )
         assert fast.workflow_stage == "organized"
         assert fast.ingest_status == "skipped"
+        security = service.security_check()
+        assert security.status in {"ok", "warning"}
         print("agent-workflow-smoke: ok")
 
 

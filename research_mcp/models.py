@@ -395,6 +395,33 @@ class ResearchWorkflowResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class DiagnosticCheck(BaseModel):
+    id: str
+    label: str
+    status: Literal["ok", "warning", "error"]
+    message: str
+    recommendation: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SecurityCheckResponse(BaseModel):
+    status: Literal["ok", "warning", "error"]
+    generated_at: str
+    checks: list[DiagnosticCheck] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
+class InstallReadinessResponse(BaseModel):
+    status: Literal["ok", "warning", "error"]
+    generated_at: str
+    checks: list[DiagnosticCheck] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+
+
 # Backward-compatible aliases for older CLI/service code paths.
 LibraryListResponse = LibrariesResponse
 LibraryItemRecord = LibraryItemEntry
