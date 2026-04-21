@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import concurrent.futures
 from functools import lru_cache
+import os
 from pathlib import Path
+import re
+import shutil
+import stat
+import subprocess
 import time
 
 from research_mcp import __version__
@@ -21,8 +26,10 @@ from research_mcp.models import (
     AnalysisSummaryResponse,
     ContextBundleResponse,
     DownloadBatchResponse,
+    DiagnosticCheck,
     DomainProfilesResponse,
     HealthCheckResponse,
+    InstallReadinessResponse,
     IngestResponse,
     LibrariesResponse,
     LibraryDetailResponse,
@@ -33,6 +40,7 @@ from research_mcp.models import (
     ProviderCoverage,
     ProviderStatus,
     ResearchWorkflowResponse,
+    SecurityCheckResponse,
     SearchResponse,
 )
 from research_mcp.paths import APP_HOME, CODEX_CONFIG_FILE, ENV_FILE, INSTALL_STATE_FILE, PROJECT_ROOT, command_path
@@ -491,6 +499,41 @@ class ResearchService:
     def list_domain_profiles(self) -> DomainProfilesResponse:
         return DomainProfilesResponse(status="ok", generated_at=now_utc_iso(), profiles=list_domain_profiles())
 
+    def security_check(self) -> SecurityCheckResponse:
+        checks = [
+            self._check_app_home_safety(),
+            self._check_env_file_permissions(),
+            self._check_codex_config_secrets(),
+            self._check_ui_binding_defaults(),
+            self._check_mutating_tool_exposure(),
+        ]
+        return SecurityCheckResponse(
+            status=_diagnostic_status(checks),
+            generated_at=now_utc_iso(),
+            checks=checks,
+            warnings=[check.message for check in checks if check.status == "warning"],
+            errors=[check.message for check in checks if check.status == "error"],
+            recommendations=[check.recommendation for check in checks if check.recommendation],
+        )
+
+    def install_readiness(self) -> InstallReadinessResponse:
+        checks = [
+            self._check_command("node", ["node", "--version"], "Node.js 18+ is required for the npm installer."),
+            self._check_command("python", [str(Path(os.sys.executable)), "--version"], "Python 3.10+ is required for the Scibudy runtime."),
+            self._check_command("codex", ["codex", "--version"], "Install Codex or run setup with --no-install-codex if MCP integration is not needed."),
+            self._check_app_home_writable(),
+            self._check_recommended_secrets(),
+            self._check_local_model_readiness(),
+        ]
+        return InstallReadinessResponse(
+            status=_diagnostic_status(checks),
+            generated_at=now_utc_iso(),
+            checks=checks,
+            warnings=[check.message for check in checks if check.status == "warning"],
+            errors=[check.message for check in checks if check.status == "error"],
+            recommendations=[check.recommendation for check in checks if check.recommendation],
+        )
+
     def list_analysis_reports(self, *, library_id: str | None = None, item_id: str | None = None) -> AnalysisReportsResponse:
         return self.analysis.list_reports(library_id=library_id, item_id=item_id)
 
@@ -613,6 +656,7 @@ class ResearchService:
                 "search_source",
                 "resolve_open_access",
                 "health_check",
+                "security_check",
                 "download_pdfs",
                 "organize_library",
                 "collect_library",
@@ -646,6 +690,148 @@ class ResearchService:
             ],
             provider_statuses=provider_statuses,
             suggestions=list(dict.fromkeys(suggestions)),
+        )
+
+    def _check_app_home_safety(self) -> DiagnosticCheck:
+        path = APP_HOME.resolve()
+        dangerous = _is_dangerous_path(path)
+        return DiagnosticCheck(
+            id="app_home_safety",
+            label="App home path",
+            status="error" if dangerous else "ok",
+            message=f"App home is {path}" if not dangerous else f"App home points to a dangerous path: {path}",
+            recommendation="Choose a dedicated user-writable app home such as ~/.research-mcp." if dangerous else None,
+            metadata={"path": str(path)},
+        )
+
+    def _check_env_file_permissions(self) -> DiagnosticCheck:
+        if not ENV_FILE.exists():
+            return DiagnosticCheck(
+                id="env_permissions",
+                label=".env permissions",
+                status="warning",
+                message=f"{ENV_FILE} does not exist.",
+                recommendation="Run scibudy setup --install-codex to create the local secrets file.",
+                metadata={"path": str(ENV_FILE), "exists": False},
+            )
+        mode = stat.S_IMODE(ENV_FILE.stat().st_mode)
+        too_open = os.name != "nt" and bool(mode & 0o077)
+        return DiagnosticCheck(
+            id="env_permissions",
+            label=".env permissions",
+            status="warning" if too_open else "ok",
+            message=f"{ENV_FILE} mode is {oct(mode)}" if not too_open else f"{ENV_FILE} mode is too broad: {oct(mode)}",
+            recommendation=f"Run chmod 600 {ENV_FILE}" if too_open else None,
+            metadata={"path": str(ENV_FILE), "mode": oct(mode), "exists": True},
+        )
+
+    def _check_codex_config_secrets(self) -> DiagnosticCheck:
+        if not CODEX_CONFIG_FILE.exists():
+            return DiagnosticCheck(
+                id="codex_config_secrets",
+                label="Codex config secrets",
+                status="warning",
+                message=f"{CODEX_CONFIG_FILE} does not exist.",
+                recommendation="Run scibudy install-codex after setup if Codex MCP integration is needed.",
+            )
+        content = CODEX_CONFIG_FILE.read_text(encoding="utf-8", errors="ignore")
+        suspicious = _find_suspicious_secret_lines(content)
+        return DiagnosticCheck(
+            id="codex_config_secrets",
+            label="Codex config secrets",
+            status="warning" if suspicious else "ok",
+            message="Codex config has suspicious inline secret values." if suspicious else "No obvious inline secrets found in Codex config.",
+            recommendation="Move secrets to the app-home .env file or environment variables." if suspicious else None,
+            metadata={"path": str(CODEX_CONFIG_FILE), "suspicious_lines": suspicious[:5]},
+        )
+
+    def _check_ui_binding_defaults(self) -> DiagnosticCheck:
+        return DiagnosticCheck(
+            id="ui_binding",
+            label="HTTP UI binding",
+            status="ok",
+            message="CLI UI and HTTP server default to 127.0.0.1.",
+            recommendation="Avoid --host 0.0.0.0 unless you understand the local network exposure risk.",
+        )
+
+    def _check_mutating_tool_exposure(self) -> DiagnosticCheck:
+        mutating_tools = [
+            "research_workflow",
+            "download_pdfs",
+            "organize_library",
+            "collect_library",
+            "import_library",
+            "rename_library",
+            "archive_library",
+            "restore_library",
+            "tag_library",
+            "update_library_item",
+            "archive_library_item",
+            "restore_library_item",
+            "generate_context_bundle",
+            "update_analysis_settings",
+            "ingest_library",
+            "ingest_library_item",
+        ]
+        return DiagnosticCheck(
+            id="mutating_tools",
+            label="Mutating MCP tools",
+            status="warning",
+            message=f"{len(mutating_tools)} mutating/admin tools are exposed to Codex.",
+            recommendation="Keep Codex approval/sandbox settings appropriate for agent workflows.",
+            metadata={"tools": mutating_tools},
+        )
+
+    def _check_command(self, check_id: str, command: list[str], recommendation: str) -> DiagnosticCheck:
+        executable = shutil.which(command[0]) if not Path(command[0]).exists() else command[0]
+        if not executable:
+            return DiagnosticCheck(id=check_id, label=check_id, status="warning", message=f"{command[0]} not found.", recommendation=recommendation)
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+            output = (result.stdout or result.stderr or "").strip()
+            status = "ok" if result.returncode == 0 else "warning"
+            return DiagnosticCheck(id=check_id, label=check_id, status=status, message=output or f"{command[0]} returned {result.returncode}", recommendation=None if status == "ok" else recommendation)
+        except Exception as exc:  # noqa: BLE001
+            return DiagnosticCheck(id=check_id, label=check_id, status="warning", message=f"{command[0]} check failed: {exc}", recommendation=recommendation)
+
+    def _check_app_home_writable(self) -> DiagnosticCheck:
+        try:
+            APP_HOME.mkdir(parents=True, exist_ok=True)
+            test_path = APP_HOME / ".scibudy-write-test"
+            test_path.write_text("ok", encoding="utf-8")
+            test_path.unlink(missing_ok=True)
+            return DiagnosticCheck(id="app_home_writable", label="App home writable", status="ok", message=f"{APP_HOME} is writable.", metadata={"path": str(APP_HOME)})
+        except Exception as exc:  # noqa: BLE001
+            return DiagnosticCheck(id="app_home_writable", label="App home writable", status="error", message=f"{APP_HOME} is not writable: {exc}", recommendation="Choose a writable app home with --app-home or SCIBUDY_HOME.")
+
+    def _check_recommended_secrets(self) -> DiagnosticCheck:
+        missing = []
+        for key, attr in [
+            ("OPENALEX_API_KEY", "openalex_api_key"),
+            ("CROSSREF_MAILTO", "crossref_mailto"),
+            ("UNPAYWALL_EMAIL", "unpaywall_email"),
+        ]:
+            if not getattr(self.settings, attr):
+                missing.append(key)
+        return DiagnosticCheck(
+            id="recommended_secrets",
+            label="Recommended API configuration",
+            status="warning" if missing else "ok",
+            message="Missing recommended configuration: " + ", ".join(missing) if missing else "Recommended API configuration is present.",
+            recommendation="Run scibudy setup --install-codex and fill recommended values." if missing else None,
+            metadata={"missing": missing},
+        )
+
+    def _check_local_model_readiness(self) -> DiagnosticCheck:
+        env_python = Path.home() / "anaconda3" / "envs" / self.settings.local_embedding_env / "bin" / "python"
+        if env_python.exists():
+            return DiagnosticCheck(id="local_models", label="Local model environment", status="ok", message=f"Local model env exists: {env_python}")
+        return DiagnosticCheck(
+            id="local_models",
+            label="Local model environment",
+            status="warning",
+            message=f"Local model env is not installed: {self.settings.local_embedding_env}",
+            recommendation="Only needed for gpu-local/full profiles. Run scibudy install-local-models on Linux NVIDIA systems.",
         )
 
     def _run_provider_group(
@@ -967,6 +1153,52 @@ def _validate_quality_mode(quality_mode: str) -> str:
     if normalized not in {"fast", "standard", "deep"}:
         raise ValueError("quality_mode must be one of: fast, standard, deep")
     return normalized
+
+
+def _diagnostic_status(checks: list[DiagnosticCheck]) -> str:
+    if any(check.status == "error" for check in checks):
+        return "error"
+    if any(check.status == "warning" for check in checks):
+        return "warning"
+    return "ok"
+
+
+def _is_dangerous_path(path: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except Exception:
+        resolved = path
+    if resolved.anchor and resolved == Path(resolved.anchor):
+        return True
+    dangerous = {Path("/"), Path("/etc"), Path("/usr"), Path("/bin"), Path("/sbin"), Path("/var"), Path("/opt")}
+    if resolved in dangerous:
+        return True
+    home = Path.home().resolve()
+    return resolved == home.parent or resolved == PROJECT_ROOT.parent
+
+
+def _find_suspicious_secret_lines(content: str) -> list[str]:
+    suspicious: list[str] = []
+    token_patterns = [
+        re.compile(r"sk-[A-Za-z0-9_-]{16,}"),
+        re.compile(r"pypi-[A-Za-z0-9_-]{16,}"),
+        re.compile(r"npm_[A-Za-z0-9_-]{16,}"),
+    ]
+    assignment_pattern = re.compile(r"(?i)(api[_-]?key|token|password|secret)\s*=\s*[\"']([^\"']+)[\"']")
+    for line_number, line in enumerate(content.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if any(pattern.search(stripped) for pattern in token_patterns):
+            suspicious.append(f"{line_number}: {stripped[:120]}")
+            continue
+        match = assignment_pattern.search(stripped)
+        if not match:
+            continue
+        value = match.group(2).strip()
+        if value and value not in {"*****", "true", "false"} and not value.startswith("${"):
+            suspicious.append(f"{line_number}: {stripped[:120]}")
+    return suspicious
 
 
 @lru_cache(maxsize=1)

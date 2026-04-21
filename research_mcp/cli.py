@@ -18,6 +18,7 @@ from research_mcp.formatters import (
     format_analysis_summary_response,
     format_ingest_response,
     format_context_bundle_response,
+    format_diagnostic_response,
     format_download_batch_response,
     format_domain_profiles_response,
     format_libraries_response,
@@ -93,6 +94,8 @@ def dispatch(args: argparse.Namespace) -> None:
         run_setup(args)
     elif args.command == "doctor":
         run_doctor(args)
+    elif args.command == "security-audit":
+        run_security_audit(args)
     elif args.command == "bootstrap":
         run_bootstrap(args)
     elif args.command == "install-codex":
@@ -195,6 +198,10 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser("doctor", help="Show setup status and optional smoke results.")
     doctor_parser.add_argument("--json", action="store_true")
     doctor_parser.add_argument("--smoke", action="store_true")
+    doctor_parser.add_argument("--install-readiness", action="store_true")
+
+    security_parser = subparsers.add_parser("security-audit", help="Run local security checks for MCP/Codex configuration.")
+    security_parser.add_argument("--format", choices=["table", "json"], default="table")
 
     bootstrap_parser = subparsers.add_parser("bootstrap", help="Run the unified first-time bootstrap flow.")
     bootstrap_parser.add_argument("--profile", choices=["base", "analysis", "gpu-local", "full"], default="base")
@@ -481,6 +488,10 @@ def run_setup(args: argparse.Namespace) -> None:
 
 def run_doctor(args: argparse.Namespace) -> None:
     service = ResearchService()
+    if getattr(args, "install_readiness", False):
+        readiness = service.install_readiness()
+        print(format_diagnostic_response(readiness.model_dump(mode="json"), fmt="json" if args.json else "table"))
+        return
     health = service.health_check()
     payload: dict[str, Any] = health.model_dump(mode="json")
     if args.smoke:
@@ -519,6 +530,11 @@ def run_doctor(args: argparse.Namespace) -> None:
         print("Recommended next steps:")
         for suggestion in health.suggestions:
             print(f"- {suggestion}")
+
+
+def run_security_audit(args: argparse.Namespace) -> None:
+    response = ResearchService().security_check()
+    print(format_diagnostic_response(response.model_dump(mode="json"), fmt=args.format))
 
 
 def run_bootstrap(args: argparse.Namespace) -> None:

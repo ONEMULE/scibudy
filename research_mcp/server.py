@@ -28,6 +28,7 @@ from research_mcp.models import (
     OrganizeLibraryResponse,
     ResearchWorkflowResponse,
     SearchResponse,
+    SecurityCheckResponse,
 )
 from research_mcp.service import get_service
 from research_mcp.settings import get_settings
@@ -138,6 +139,15 @@ def resolve_open_access(doi: str) -> OpenAccessResponse:
 )
 def health_check() -> HealthCheckResponse:
     return get_service().health_check()
+
+
+@app.tool(
+    description="Run local MCP safety checks for secrets, app-home path, Codex config, UI binding, and exposed mutating tools.",
+    structured_output=True,
+    annotations=READ_ONLY_TOOL,
+)
+def security_check() -> SecurityCheckResponse:
+    return get_service().security_check()
 
 
 @app.tool(description="Download PDFs for papers from a saved run or CSV file into a local directory.", structured_output=True)

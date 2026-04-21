@@ -1,4 +1,6 @@
 from pathlib import Path
+import shutil
+import subprocess
 
 import pytest
 
@@ -54,3 +56,55 @@ def test_cli_version_command(monkeypatch, capsys):
     cli_main()
 
     assert __version__ in capsys.readouterr().out
+
+
+def test_installer_doctor_only_has_no_side_effects(tmp_path):
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    app_home = tmp_path / "app-home"
+
+    result = subprocess.run(
+        ["node", "bin/scibudy-install.mjs", "--doctor-only", "--app-home", str(app_home)],
+        cwd=Path.cwd(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "doctor-only: no files were written" in result.stdout
+    assert not app_home.exists()
+
+
+def test_installer_print_plan_has_no_side_effects(tmp_path):
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    app_home = tmp_path / "app-home"
+
+    result = subprocess.run(
+        ["node", "bin/scibudy-install.mjs", "--print-plan", "--app-home", str(app_home)],
+        cwd=Path.cwd(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Scibudy install plan" in result.stdout
+    assert not app_home.exists()
+
+
+def test_installer_rejects_dangerous_app_home():
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+
+    result = subprocess.run(
+        ["node", "bin/scibudy-install.mjs", "--doctor-only", "--app-home", "/"],
+        cwd=Path.cwd(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "Refusing dangerous --app-home path" in (result.stderr + result.stdout)
